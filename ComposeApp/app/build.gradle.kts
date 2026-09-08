@@ -103,6 +103,9 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     // OpenCV：课表截图占用识别（色块检测，无 OCR）
     implementation("com.quickbirdstudios:opencv:4.5.3.0")
+
+    // 教务网页导入：适配器仓库同步（HTTP 下载）
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
 
     // Room（KSP 编译期处理）

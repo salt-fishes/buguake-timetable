@@ -223,9 +223,10 @@
 
 - 上游仓库：https://github.com/XingHeYuZhuan/shiguang_warehouse
 - 许可证：MIT License
-- 引用内容：本项目默认导入源仓库派生自该仓库；随应用分发的适配脚本
-  （如有）保留原作者署名与 Git 贡献记录。具体引用的脚本及其作者
-  在内置包发布时逐个列明于此。
+- 引用内容：本项目默认导入源暂指向该官方仓库（过渡期；自有 fork
+  https://github.com/salt-fishes/shiguang_warehouse 审核后切换）。运行时按适配器
+  索引懒加载的 .js 脚本保留原作者署名（Git 贡献记录），具体引用的脚本及其作者
+  随导入源配置动态确定。
 
 ## 3. 简课表（jiankebiao）
 

@@ -19,16 +19,16 @@ val keystoreProps = Properties().apply {
 val hasSigning = keystoreProps.getProperty("storeFile") != null
 
 android {
-    namespace = "com.saltfish.simple"
+    namespace = "com.buguake.timetable"
     compileSdk = 35
     buildToolsVersion = "34.0.0"
 
     defaultConfig {
-        applicationId = "com.saltfish.simple"
+        applicationId = "com.buguake.timetable"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "2.2.1"
+        versionCode = 1
+        versionName = "0.1.0"
 
         // 仅保留 arm64-v8a（已无原生库依赖，收窄以备将来）
         ndk {

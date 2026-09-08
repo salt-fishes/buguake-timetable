@@ -91,6 +91,8 @@ fun ImportWebViewScreen(
     var showTablePicker by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<BridgeDialog?>(null) }
     var injectedAtTable by remember { mutableStateOf<Long?>(null) }
+    // 适配器脚本顶层 const 在全局作用域：同页二次注入会冲突，先重载页面再自动注入
+    var pendingInject by remember { mutableStateOf(false) }
     // 桌面模式：教务/CAS 页面按 PC 设计，手机 UA 常被拒或排版错乱；默认开启
     var desktopMode by remember { mutableStateOf(true) }
 
@@ -180,6 +182,12 @@ fun ImportWebViewScreen(
 
     fun injectAdapter() {
         val tableId = importTableId ?: run { showTablePicker = true; return }
+        if (injectedAtTable != null) {
+            android.util.Log.i("WebImport", "同页重复注入：先重载页面再自动执行")
+            pendingInject = true
+            webViewRef?.reload()
+            return
+        }
         injectedAtTable = tableId
         evaluateJs("window.currentTableId = '$tableId';\n$jsContent", null)
         scope.launch { snackbarHostState.showSnackbar("已注入适配器脚本，正在执行…") }
@@ -295,6 +303,8 @@ fun ImportWebViewScreen(
                             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                                 super.onPageStarted(view, url, favicon)
                                 android.util.Log.i("WebImport", "页面加载: $url")
+                                // 新页面 = 新 JS 全局作用域，重复注入守卫复位
+                                injectedAtTable = null
                                 // 每次导航都确保桥已挂载（脚本幂等）
                                 view.evaluateJavascript(JS_BRIDGE_INIT, null)
                             }
@@ -302,6 +312,11 @@ fun ImportWebViewScreen(
                             override fun onPageFinished(view: WebView, url: String) {
                                 super.onPageFinished(view, url)
                                 if (desktopMode) injectDesktopViewportFix(view)
+                                if (pendingInject) {
+                                    pendingInject = false
+                                    // 等页面脚本（jQuery 等）就绪后自动重新注入
+                                    view.postDelayed({ injectAdapter() }, 600)
+                                }
                             }
 
                             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -377,7 +392,8 @@ fun ImportWebViewScreen(
 
         is BridgeDialog.SingleSelection -> SingleSelectionDialog(
             state = d,
-            onDismiss = {
+            onClose = { dialog = null },
+            onCancel = {
                 dialog = null
                 d.onResult(null)
             },
@@ -425,10 +441,14 @@ private fun PromptDialog(state: BridgeDialog.Prompt, onClose: () -> Unit, onCanc
 }
 
 @Composable
-private fun SingleSelectionDialog(state: BridgeDialog.SingleSelection, onDismiss: () -> Unit) {
+private fun SingleSelectionDialog(
+    state: BridgeDialog.SingleSelection,
+    onClose: () -> Unit,
+    onCancel: () -> Unit,
+) {
     var selected by remember(state) { mutableStateOf(state.defaultSelectedIndex) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onCancel,
         title = { Text(state.title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -447,11 +467,14 @@ private fun SingleSelectionDialog(state: BridgeDialog.SingleSelection, onDismiss
             }
         },
         confirmButton = {
-            TextButton(onClick = { onDismiss(); state.onResult(selected.takeIf { it >= 0 }) }) {
+            TextButton(onClick = {
+                onClose()
+                state.onResult(selected.takeIf { it >= 0 })
+            }) {
                 Text("确定")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onCancel) { Text("取消") } },
     )
 }
 

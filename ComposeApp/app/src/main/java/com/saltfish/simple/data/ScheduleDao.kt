@@ -19,7 +19,8 @@ interface ScheduleDao {
         SELECT e.id AS entryId, c.id AS courseId, c.name AS courseName, c.type AS type,
                c.credit AS credit, c.colorIndex AS colorIndex,
                e.dayOfWeek, e.startSection, e.endSection, e.weeksCsv,
-               e.campus, e.building, e.room, e.teacher
+               e.campus, e.building, e.room, e.teacher,
+               e.isCustomTime, e.customStartTime, e.customEndTime, c.remark AS remark
         FROM schedule_entries e JOIN courses c ON c.id = e.courseId
         WHERE c.hidden = 0 AND c.timetableId = :timetableId
         ORDER BY e.dayOfWeek, e.startSection
@@ -32,7 +33,8 @@ interface ScheduleDao {
         SELECT e.id AS entryId, c.id AS courseId, c.name AS courseName, c.type AS type,
                c.credit AS credit, c.colorIndex AS colorIndex,
                e.dayOfWeek, e.startSection, e.endSection, e.weeksCsv,
-               e.campus, e.building, e.room, e.teacher
+               e.campus, e.building, e.room, e.teacher,
+               e.isCustomTime, e.customStartTime, e.customEndTime, c.remark AS remark
         FROM schedule_entries e JOIN courses c ON c.id = e.courseId
         WHERE c.hidden = 0 AND c.timetableId = :timetableId
         ORDER BY e.dayOfWeek, e.startSection

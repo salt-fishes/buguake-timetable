@@ -94,6 +94,7 @@ fun CourseDetailSheet(
             DetailRow("时间", timeLabel(entry))
             DetailRow("地点", entry.fullLocation.ifBlank { "—" })
             DetailRow("教师", entry.teacher.ifBlank { "—" })
+            if (entry.remark.isNotBlank()) DetailRow("备注", entry.remark)
 
             // 操作行（MD3：主操作 FilledTonal，次操作 Text）
             Row(

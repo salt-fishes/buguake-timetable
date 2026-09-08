@@ -96,6 +96,7 @@ class ScheduleRepository(private val dao: ScheduleDao) {
                 classNo = c.classNo,
                 composition = c.composition,
                 colorIndex = colorIndex,
+                remark = c.remark.take(300),
             )
             entriesByCourse[c.name] = mutableListOf()
         }
@@ -113,6 +114,9 @@ class ScheduleRepository(private val dao: ScheduleDao) {
                     room = e.room,
                     // 条目级教师缺失时回退课程级（同一门课教师通常相同）
                     teacher = e.teacher.ifBlank { teacherByName[e.course] ?: "" },
+                    isCustomTime = e.isCustomTime,
+                    customStartTime = e.customStartTime,
+                    customEndTime = e.customEndTime,
                 )
             )
         }

@@ -716,6 +716,11 @@ private fun WeekGridPage(
 ) {
     val density = LocalDensity.current
     val rowHeightPx = with(density) { ROW_HEIGHT.toPx() }
+    // 自定义时间段课次按作息表映射为重叠节次区间参与网格布局；
+    // 完全落在网格外（无重叠）的条目不进网格，仅出现在今日页/详情
+    val layoutEntries = remember(allEntries, sectionTimes) {
+        allEntries.mapNotNull { it.withEffectiveSections(sectionTimes) }
+    }
     // 拖拽状态：grab=手指抓取点（块内偏移），pointerLocal=手指当前块内位置（均为块局部像素）
     var drag by remember { mutableStateOf<GridDrag?>(null) }
     var gridCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -740,7 +745,7 @@ private fun WeekGridPage(
         var newStart = (topLeft.y / rowHeightPx).roundToInt() + 1
         newStart = newStart.coerceIn(1, (maxSection - dur).coerceAtLeast(1))
         // 冲突避让：与本周同天其他课程重叠时，向上/向下找最近空位
-        fun conflicts(s: Int): Boolean = allEntries.any {
+        fun conflicts(s: Int): Boolean = layoutEntries.any {
             it.entryId != d.entry.entryId && it.dayOfWeek == newDay && it.isInWeek(week) &&
                 (it.startSection ?: 1) <= s + dur && (it.endSection ?: it.startSection ?: 1) >= s
         }
@@ -770,7 +775,7 @@ private fun WeekGridPage(
     ) {
         Row(Modifier.fillMaxSize()) {
             for (d in visibleDays) {
-                val dayEntries = allEntries.filter { it.dayOfWeek == d }
+                val dayEntries = layoutEntries.filter { it.dayOfWeek == d }
                 DayColumn(
                     dayEntries = dayEntries,
                     week = week,
@@ -783,20 +788,23 @@ private fun WeekGridPage(
                     draggedEntryId = drag?.entry?.entryId,
                     bounceEntryId = bounceEntryId,
                     onDragStart = { entry, grab, blockCoords, sizePx ->
-                        // 块在网格内的位置用 localPositionOf 直接换算，
-                        // 不经窗口坐标（窗口坐标不含链上 offset，会跳到列顶）
-                        val grid = gridCoords
-                        val originInGrid = if (grid != null && blockCoords.isAttached) {
-                            grid.localPositionOf(blockCoords, Offset.Zero)
-                        } else Offset.Zero
-                        drag = GridDrag(
-                            entry,
-                            originInGrid,
-                            grab,
-                            grab,
-                            sizePx.width.toFloat(),
-                            sizePx.height.toFloat(),
-                        )
+                        // 自定义时间段课次不可拖拽：拖拽落位写入的是节次坐标，会破坏真实时间语义
+                        if (!entry.isCustomTime) {
+                            // 块在网格内的位置用 localPositionOf 直接换算，
+                            // 不经窗口坐标（窗口坐标不含链上 offset，会跳到列顶）
+                            val grid = gridCoords
+                            val originInGrid = if (grid != null && blockCoords.isAttached) {
+                                grid.localPositionOf(blockCoords, Offset.Zero)
+                            } else Offset.Zero
+                            drag = GridDrag(
+                                entry,
+                                originInGrid,
+                                grab,
+                                grab,
+                                sizePx.width.toFloat(),
+                                sizePx.height.toFloat(),
+                            )
+                        }
                     },
                     onDragDelta = { pointerLocal ->
                         // 手指位置为块内绝对坐标，逐帧替换而非累计增量，保证严格跟手

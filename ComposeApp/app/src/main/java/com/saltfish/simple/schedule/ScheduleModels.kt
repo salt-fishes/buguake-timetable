@@ -18,6 +18,7 @@ data class ParsedCourse(
     val room: String,
     val classNo: String,
     val composition: String,
+    val remark: String = "",   // 备注（教务网页导入可带，入库截断 300 字）
 )
 
 /** 解析出的排课条目。同一门课不同天可能不同教室，故地点/教师随条目存储。 */
@@ -31,6 +32,12 @@ data class ParsedEntry(
     val building: String = "", // 楼号（随条目）
     val room: String = "",     // 场地（随条目）
     val teacher: String = "",  // 教师（随条目）
+    // 自定义时间段课次（教务课次不落在标准节次网格上）：
+    // isCustomTime=true 时 start/endSection 存与作息表重叠的节次（可为空=完全网格外），
+    // 真实起止以 customStartTime/customEndTime（"HH:MM"）为准
+    val isCustomTime: Boolean = false,
+    val customStartTime: String = "",
+    val customEndTime: String = "",
 )
 
 /** 整个文件的解析结果。 */
@@ -51,6 +58,7 @@ data class ParsedSchedule(
                     put("teacher", c.teacher); put("campus", c.campus)
                     put("building", c.building); put("room", c.room)
                     put("classNo", c.classNo); put("composition", c.composition)
+                    put("remark", c.remark)
                 })
             }
         })
@@ -63,6 +71,9 @@ data class ParsedSchedule(
                     put("weeks", org.json.JSONArray(e.weeks.toTypedArray()))
                     put("campus", e.campus); put("building", e.building)
                     put("room", e.room); put("teacher", e.teacher)
+                    put("isCustomTime", e.isCustomTime)
+                    put("customStartTime", e.customStartTime)
+                    put("customEndTime", e.customEndTime)
                 })
             }
         })
@@ -85,9 +96,10 @@ data class ParsedSchedule(
                         ParsedCourse(
                             name = o.getString("name"), type = o.getString("type"),
                             credit = o.getString("credit"), teacher = o.getString("teacher"),
-                            campus = o.getString("campus"), building = o.getString("building"),
-                            room = o.getString("room"), classNo = o.getString("classNo"),
-                            composition = o.getString("composition"),
+                            campus = o.optString("campus", ""), building = o.optString("building", ""),
+                            room = o.optString("room", ""), classNo = o.optString("classNo", ""),
+                            composition = o.optString("composition", ""),
+                            remark = o.optString("remark", ""),
                         )
                     )
                 }
@@ -108,6 +120,9 @@ data class ParsedSchedule(
                             building = o.optString("building", ""),
                             room = o.optString("room", ""),
                             teacher = o.optString("teacher", ""),
+                            isCustomTime = o.optBoolean("isCustomTime", false),
+                            customStartTime = o.optString("customStartTime", ""),
+                            customEndTime = o.optString("customEndTime", ""),
                         )
                     )
                 }

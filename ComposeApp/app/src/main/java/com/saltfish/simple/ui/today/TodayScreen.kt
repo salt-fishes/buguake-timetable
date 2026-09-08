@@ -50,21 +50,21 @@ fun TodayScreen(
     val currentWeek = remember(settings.semesterStart) {
         WeekCalculator.currentWeek(settings.semesterStartDate, today)
     }
-    val todayEntries = remember(entries, currentWeek, today) {
+    val todayEntries = remember(entries, currentWeek, today, settings.sectionTimes) {
         entries
             .filter { it.dayOfWeek == today.dayOfWeek.value && it.isInWeek(currentWeek) }
-            .sortedBy { it.startSection ?: 99 }
+            .sortedBy { it.minutesOfDay(settings.sectionTimes)?.first ?: 99 * 60 }
     }
     val now = remember { LocalTime.now() }
     val nowMinutes = now.hour * 60 + now.minute
 
     val ongoing = todayEntries.firstOrNull { e ->
-        val span = TimeUtils.sectionMinutes(settings.sectionTimes, e.startSection ?: return@firstOrNull false)
-            ?.let { (s, en) -> s..en } ?: return@firstOrNull false
+        val span = e.minutesOfDay(settings.sectionTimes)?.let { (s, en) -> s..en }
+            ?: return@firstOrNull false
         nowMinutes in span
     }
     val next = todayEntries.firstOrNull { e ->
-        val sM = TimeUtils.sectionMinutes(settings.sectionTimes, e.startSection ?: 0)?.first ?: 0
+        val sM = e.minutesOfDay(settings.sectionTimes)?.first ?: 24 * 60
         sM > nowMinutes
     }
 
@@ -164,7 +164,7 @@ private fun OngoingCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (glass) cs.onSurfaceVariant else cs.onPrimaryContainer.copy(alpha = 0.75f),
             )
-            val span = TimeUtils.sectionMinutes(settings.sectionTimes, e.startSection ?: 1)
+            val span = e.minutesOfDay(settings.sectionTimes)
             if (span != null) {
                 val fraction = ((nowMinutes - span.first).toFloat() / (span.second - span.first))
                     .coerceIn(0f, 1f)
@@ -201,7 +201,7 @@ private fun NextCard(
     glass: Boolean,
 ) {
     val cs = MaterialTheme.colorScheme
-    val sM = TimeUtils.sectionMinutes(settings.sectionTimes, e.startSection ?: 1)?.first ?: 0
+    val sM = e.minutesOfDay(settings.sectionTimes)?.first ?: 24 * 60
     val body: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -246,7 +246,7 @@ private fun TimelineItem(
     transparent: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
-    val span = TimeUtils.sectionMinutes(settings.sectionTimes, e.startSection ?: 1)
+    val span = e.minutesOfDay(settings.sectionTimes)
     val endMinutes = span?.second ?: 0
     val finished = span != null && nowMinutes > endMinutes
     ListItem(

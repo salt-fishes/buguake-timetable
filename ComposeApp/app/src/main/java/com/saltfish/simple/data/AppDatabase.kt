@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TimetableEntity::class, CourseEntity::class, ScheduleEntryEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -59,6 +59,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 5 → 6：教务网页导入的模型扩展。
+         * - courses + remark（课程备注，≤300 字）
+         * - schedule_entries + isCustomTime/customStartTime/customEndTime（自定义时间段课次）
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `courses` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `schedule_entries` ADD COLUMN `isCustomTime` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `schedule_entries` ADD COLUMN `customStartTime` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `schedule_entries` ADD COLUMN `customEndTime` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -66,7 +80,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "composeapp.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build().also { INSTANCE = it }
             }
     }

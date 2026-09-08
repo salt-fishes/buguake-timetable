@@ -32,6 +32,9 @@ import com.saltfish.simple.webimport.bridge.WebBridgeHandler
 import com.saltfish.simple.webimport.bridge.WebDialogHost
 import kotlinx.coroutines.launch
 
+/** 桌面 UA：教务/CAS 页面按 PC 浏览器设计（与拾光 DESKTOP_USER_AGENT 一致）。 */
+private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 /** 桥弹窗的 UI 状态（Host 渲染，Handler 回调驱动）。 */
 private sealed interface BridgeDialog {
     data class Alert(
@@ -88,6 +91,38 @@ fun ImportWebViewScreen(
     var showTablePicker by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<BridgeDialog?>(null) }
     var injectedAtTable by remember { mutableStateOf<Long?>(null) }
+    // 桌面模式：教务/CAS 页面按 PC 设计，手机 UA 常被拒或排版错乱；默认开启
+    var desktopMode by remember { mutableStateOf(true) }
+
+    fun applyDesktopMode(wv: WebView, desktop: Boolean) {
+        wv.settings.userAgentString = if (desktop) DESKTOP_USER_AGENT
+        else android.webkit.WebSettings.getDefaultUserAgent(wv.context)
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+    }
+
+    /** 桌面模式下补 viewport meta 并触发重排（避免 PC 页按 980px 挤压）。 */
+    fun injectDesktopViewportFix(wv: WebView) {
+        wv.evaluateJavascript(
+            """
+            (function() {
+                try {
+                    var metas = document.getElementsByTagName('meta');
+                    for (var i = metas.length - 1; i >= 0; i--) {
+                        if (metas[i].getAttribute('name') === 'viewport') {
+                            metas[i].parentNode.removeChild(metas[i]);
+                        }
+                    }
+                    var meta = document.createElement('meta');
+                    meta.name = 'viewport';
+                    meta.content = 'width=1280, initial-scale=1.0, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes';
+                    document.head.appendChild(meta);
+                    window.dispatchEvent(new Event('resize'));
+                } catch(e) {}
+            })();
+            """.trimIndent(), null
+        )
+    }
 
     fun evaluateJs(script: String, callback: ((String?) -> Unit)?) {
         webViewRef?.evaluateJavascript(script, callback)
@@ -168,6 +203,21 @@ fun ImportWebViewScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
+                actions = {
+                    // 桌面/手机模式切换：切 UA + 重载（Cookie 会话保留）
+                    IconButton(onClick = {
+                        desktopMode = !desktopMode
+                        webViewRef?.let { wv ->
+                            applyDesktopMode(wv, desktopMode)
+                            wv.reload()
+                        }
+                    }) {
+                        Text(
+                            if (desktopMode) "桌面" else "手机",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
                     else MaterialTheme.colorScheme.surface,
@@ -216,8 +266,21 @@ fun ImportWebViewScreen(
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            databaseEnabled = true
+                            // 学校站点常见 http 资源混载，放行
+                            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            useWideViewPort = true
+                            loadWithOverviewMode = true
+                            setSupportZoom(true)
+                            builtInZoomControls = true
+                            displayZoomControls = false
+                        }
+                        applyDesktopMode(this, desktopMode)
+                        // debug 构建允许 chrome://inspect 远程调试
+                        WebView.setWebContentsDebuggingEnabled(true)
                         addJavascriptInterface(
                             object {
                                 @JavascriptInterface
@@ -231,8 +294,14 @@ fun ImportWebViewScreen(
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                                 super.onPageStarted(view, url, favicon)
+                                android.util.Log.i("WebImport", "页面加载: $url")
                                 // 每次导航都确保桥已挂载（脚本幂等）
                                 view.evaluateJavascript(JS_BRIDGE_INIT, null)
+                            }
+
+                            override fun onPageFinished(view: WebView, url: String) {
+                                super.onPageFinished(view, url)
+                                if (desktopMode) injectDesktopViewportFix(view)
                             }
 
                             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -243,6 +312,16 @@ fun ImportWebViewScreen(
                         setWebChromeClient(object : android.webkit.WebChromeClient() {
                             override fun onProgressChanged(view: WebView, newProgress: Int) {
                                 progress = newProgress
+                            }
+
+                            // 脚本错误/日志捕获：适配器脚本的执行异常都在这里现形
+                            override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage): Boolean {
+                                android.util.Log.i(
+                                    "WebImport",
+                                    "JS[${consoleMessage.messageLevel()}] ${consoleMessage.message()} " +
+                                        "(${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
+                                )
+                                return true
                             }
                         })
                         adapter.importUrl.takeIf { it.isNotBlank() }?.let { loadUrl(it) }

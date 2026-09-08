@@ -108,6 +108,12 @@ fun PrivacyPage(
                     )
                     CardDivider()
                     PermissionRow(
+                        "蓝牙（扫描/连接）",
+                        "校园页宿舍开门：仅在你点击\"开门\"时启动，扫描并连接你选择的宿舍门锁、发送开门指令；" +
+                            "不在后台运行，不采集蓝牙轨迹。",
+                    )
+                    CardDivider()
+                    PermissionRow(
                         "网络（INTERNET）",
                         "仅用于：下载学校适配脚本（来自导入源仓库）以及在内嵌浏览器中加载" +
                             "你主动选择的教务网站完成导入。除此之外不发起任何网络请求，无广告、无统计埋点。",
@@ -116,6 +122,13 @@ fun PrivacyPage(
                     PermissionRow(
                         "开机自启",
                         "手机重启后自动恢复课前提醒闹钟，避免提醒静默失效。",
+                    )
+                    CardDivider()
+                    CardDivider()
+                    PermissionRow(
+                        "位置（仅 Android 11 及以下声明）",
+                        "旧版系统的蓝牙扫描机制要求声明该权限；本应用不调用任何定位接口、" +
+                            "不读取你的位置。Android 12 及以上不申请此权限。",
                     )
                     CardDivider()
                     PermissionRow(
@@ -131,9 +144,9 @@ fun PrivacyPage(
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(
-                        "联网只做两件事：一是从导入源仓库下载学校适配脚本，二是在内嵌浏览器中" +
-                            "加载你主动选择的教务网站。教务账号密码只在浏览器会话内使用，" +
-                            "本应用不读取、不保存、不上传。",
+                        "联网只做三件事：一是从导入源仓库下载学校适配脚本，二是在内嵌浏览器中" +
+                            "加载你主动选择的教务网站，三是校园开门时直连云莓服务器。教务账号密码" +
+                            "只在浏览器会话内使用、云莓账号密码只存本机，本应用不读取、不保存、不上传。",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -156,6 +169,22 @@ fun PrivacyPage(
                             "写入系统日历的课程事件保存在系统日历的「不挂科课表」日历中，可随时在应用内一键清空。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp))
+            SectionTitle("校园开门（云莓模块）")
+            GlassCard(glass, Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text(
+                        "宿舍开门基于开源项目 yunmei_unintelligent（MIT）移植的第三方接口实现。" +
+                            "云莓账号密码只保存在手机本地，登录与开门请求由手机直连云莓官方服务器，" +
+                            "本应用不中转、不上传。蓝牙仅在你点击开门时启动。" +
+                            "该接口通过逆向官方客户端获得，可能随官方更新而失效，" +
+                            "与云莓智能官方无关联，使用产生的后果由使用者自行承担。",
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }

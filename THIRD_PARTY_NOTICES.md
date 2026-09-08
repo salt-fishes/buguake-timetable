@@ -228,6 +228,15 @@
   索引懒加载的 .js 脚本保留原作者署名（Git 贡献记录），具体引用的脚本及其作者
   随导入源配置动态确定。
 
+## 3. 云莓不智能（yunmei_unintelligent）
+
+- 上游仓库：https://github.com/zxy19/yunmei_unintelligent
+- 许可证：MIT License（Copyright (c) 2022 zxypp）
+- 引用内容：校园页宿舍开门功能的通信协议与开门指令格式（YunmeiAPI/UnlockService
+  的 Kotlin 移植，HTTP 层以 okhttp 重写、BLE 层以 Android 原生 API 重写）。
+  该项目的接口本身通过逆向"云莓智能"官方客户端获得，本项目沿用其接口行为，
+  相关风险声明见隐私政策。
+
 ## 3. 简课表（jiankebiao）
 
 本项目派生自同一作者的前作"简课表"（MIT License, Copyright (c) 2026 咸鱼），

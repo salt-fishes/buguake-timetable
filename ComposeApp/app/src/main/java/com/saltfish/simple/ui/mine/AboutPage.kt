@@ -63,6 +63,7 @@ private val CHANGELOG: List<Pair<String, List<String>>> = listOf(
         "教务网页导入上线：学校列表、统一身份登录、一键导入（基于拾光开源适配生态）",
         "支持自定义时间段课次与课程备注；课表对比识别改纯 Kotlin 实现",
         "液态玻璃界面风格（卡顿可关闭）；全新应用图标",
+        "\"校园\"页上线：云莓宿舍蓝牙开门",
     ),
 )
 
@@ -150,6 +151,8 @@ fun AboutPage(
                     FeatureRow("课表周视图", "左右滑动切换周次，今日课程高亮，当前时间线提示")
                     CardDivider()
                     FeatureRow("今日页", "正在上课 / 下一节课 / 今日课程时间轴")
+                    CardDivider()
+                    FeatureRow("校园开门", "连接宿舍蓝牙门锁一键开门（云莓第三方接口）")
                     CardDivider()
                     FeatureRow("课表对比", "截图识别占用，与同学/其他课表 App 找共同空闲")
                     CardDivider()
@@ -297,7 +300,7 @@ fun AboutPage(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "感谢拾光课程表适配生态（Apache-2.0）、Jetpack Compose · Material 3、Room、Kotlin",
+                        "感谢拾光课程表适配生态（Apache-2.0）、yunmei_unintelligent（MIT）、Jetpack Compose · Material 3、Room、Kotlin",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

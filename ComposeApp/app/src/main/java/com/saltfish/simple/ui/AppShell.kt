@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -106,7 +107,49 @@ import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.roundToInt
 
-private val TAB_LABELS = listOf("课表", "今日", "我的")
+private val TAB_LABELS = listOf("课表", "今日", "校园", "我的")
+
+/** 锁图标（Material lock 几何，Apache 2.0；core 图标集不含，本地自绘）。 */
+private val LockIcon: androidx.compose.ui.graphics.vector.ImageVector by lazy {
+    androidx.compose.ui.graphics.vector.ImageVector.Builder(
+        name = "LockIcon",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(
+            fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black),
+            fillAlpha = 1f,
+        ) {
+            moveTo(18f, 8f)
+            lineToRelative(-1f, 0f)
+            lineTo(17f, 6f)
+            arcTo(5f, 5f, 0f, false, false, 12f, 1f)
+            arcTo(5f, 5f, 0f, false, false, 7f, 6f)
+            lineTo(7f, 8f)
+            lineTo(6f, 8f)
+            arcTo(2f, 2f, 0f, false, false, 4f, 10f)
+            lineTo(4f, 20f)
+            arcTo(2f, 2f, 0f, false, false, 6f, 22f)
+            lineToRelative(12f, 0f)
+            arcTo(2f, 2f, 0f, false, false, 20f, 20f)
+            lineTo(20f, 10f)
+            arcTo(2f, 2f, 0f, false, false, 18f, 8f)
+            close()
+            moveTo(12f, 17f)
+            arcTo(2f, 2f, 0f, false, false, 12f, 13f)
+            arcTo(2f, 2f, 0f, false, false, 12f, 17f)
+            close()
+            moveTo(15.1f, 8f)
+            lineTo(8.9f, 8f)
+            lineTo(8.9f, 6f)
+            arcTo(3.1f, 3.1f, 0f, false, true, 12f, 2.9f)
+            arcTo(3.1f, 3.1f, 0f, false, true, 15.1f, 6f)
+            close()
+        }
+    }.build()
+}
 
 /** 待确认的调课请求：范围（以后每周/仅本周）由用户在弹窗中选择。 */
 private data class MoveReq(
@@ -628,6 +671,7 @@ private data class MoveReq(
                                     when (i) {
                                         0 -> Icons.Filled.Home
                                         1 -> Icons.AutoMirrored.Filled.List
+                                        2 -> LockIcon
                                         else -> Icons.Filled.Settings
                                     },
                                     contentDescription = label,
@@ -717,6 +761,10 @@ private data class MoveReq(
                     entries = entries,
                     settings = settings,
                     glass = glassOn,
+                )
+                2 -> com.saltfish.simple.campus.ui.CampusScreen(
+                    glass = glassOn,
+                    showSnackbar = showSnackbar,
                 )
                 else -> MineScreen(
                     settings = settings,

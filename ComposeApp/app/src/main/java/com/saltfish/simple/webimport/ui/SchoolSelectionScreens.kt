@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -12,12 +13,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.saltfish.simple.webimport.AdapterCategory
 import com.saltfish.simple.webimport.AdapterData
 import com.saltfish.simple.webimport.SchoolData
 import com.saltfish.simple.webimport.SchoolIndexData
+import kotlinx.coroutines.launch
 
 /** 学校/工具集分类筛选（null = 全部）。 */
 private val CATEGORY_FILTERS = listOf(
@@ -27,7 +31,9 @@ private val CATEGORY_FILTERS = listOf(
     AdapterCategory.GENERAL_TOOL to "通用工具",
 )
 
-/** 学校选择屏：搜索（名称/拼音首字母/代码）+ 分类筛选 + 索引刷新。 */
+private data class SchoolRow(val letter: String?, val school: SchoolData?)
+
+/** 学校选择屏：搜索（名称/拼音首字母/代码）+ 分类筛选 + 首字母分组粘性头 + 字母导航条。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SchoolSelectionScreen(
@@ -42,6 +48,8 @@ fun SchoolSelectionScreen(
 ) {
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf<AdapterCategory?>(null) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     val filtered = remember(index, query, category) {
         val q = query.trim().lowercase()
@@ -56,6 +64,24 @@ fun SchoolSelectionScreen(
             }
             ?.sortedWith(compareBy({ it.initial }, { it.name }))
             .orEmpty()
+    }
+
+    // 首字母分组（非 A-Z 归入 #），展开为 头/条目 交替行，并记录字母 → 列表索引
+    val rows = remember(filtered) {
+        val grouped = filtered.groupBy { s ->
+            s.initial.firstOrNull()?.uppercaseChar()?.toString()?.takeIf { it in "A".."Z" } ?: "#"
+        }
+        buildList {
+            grouped.forEach { (letter, list) ->
+                add(SchoolRow(letter, null))
+                list.forEach { add(SchoolRow(null, it)) }
+            }
+        }
+    }
+    val letterFirstIndex = remember(rows) {
+        val map = LinkedHashMap<String, Int>()
+        rows.forEachIndexed { i, row -> row.letter?.let { l -> if (l !in map) map[l] = i } }
+        map
     }
 
     Scaffold(
@@ -120,56 +146,109 @@ fun SchoolSelectionScreen(
                         "索引加载失败：\n$error\n\n请检查网络后点击右上角刷新",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        textAlign = TextAlign.Center,
                     )
                 }
 
                 else -> {
-                    LazyColumn(
-                        Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        item {
-                            Text(
-                                index?.let {
-                                    "共 ${it.schools.size} 个学校/工具集 · 索引 ${it.versionId}" +
-                                        if (it.protocolVersion != 2) " · ⚠ 协议 v${it.protocolVersion}" else ""
-                                } ?: "",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 4.dp),
-                            )
-                        }
-                        items(filtered, key = { it.id }) { school ->
-                            ListItem(
-                                headlineContent = { Text(school.name) },
-                                supportingContent = {
-                                    Text(
-                                        "${school.id} · ${school.adapters.size} 个适配器",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                },
-                                trailingContent = {
-                                    Text(
-                                        school.initial,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                },
-                                modifier = Modifier.clickable { onSelectSchool(school) },
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                        }
-                        if (filtered.isEmpty() && index != null) {
+                    Box(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            Modifier.fillMaxSize().padding(end = 26.dp),
+                            state = listState,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
                             item {
                                 Text(
-                                    "没有匹配的学校",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    index?.let {
+                                        "共 ${it.schools.size} 个学校/工具集 · 索引 ${it.versionId}" +
+                                            if (it.protocolVersion != 2) " · ⚠ 协议 v${it.protocolVersion}" else ""
+                                    } ?: "",
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 32.dp).fillMaxWidth(),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.padding(bottom = 4.dp),
                                 )
+                            }
+                            rows.forEach { row ->
+                                if (row.letter != null) {
+                                    stickyHeader(row.letter) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Text(
+                                                row.letter,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    row.school?.let { school ->
+                                        item(key = school.id) {
+                                            ListItem(
+                                                headlineContent = { Text(school.name) },
+                                                supportingContent = {
+                                                    Text(
+                                                        "${school.id} · ${school.adapters.size} 个适配器",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                },
+                                                trailingContent = {
+                                                    Text(
+                                                        school.initial.take(4),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                },
+                                                modifier = Modifier.clickable { onSelectSchool(school) },
+                                            )
+                                            HorizontalDivider(
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (filtered.isEmpty() && index != null) {
+                                item {
+                                    Text(
+                                        "没有匹配的学校",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 32.dp).fillMaxWidth(),
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                            }
+                        }
+                        // 右侧字母导航条：点击跳到对应首字母分组
+                        if (letterFirstIndex.isNotEmpty()) {
+                            Column(
+                                Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .widthIn(max = 26.dp)
+                                    .padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                letterFirstIndex.keys.forEach { letter ->
+                                    Text(
+                                        letter,
+                                        fontSize = 9.sp,
+                                        lineHeight = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .clickable {
+                                                letterFirstIndex[letter]?.let { i ->
+                                                    scope.launch { listState.scrollToItem(i) }
+                                                }
+                                            }
+                                            .padding(horizontal = 4.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -245,6 +324,7 @@ fun AdapterSelectionScreen(
                             buildString {
                                 append("维护者：${adapter.maintainer.ifBlank { "社区" }}")
                                 if (adapter.importUrl.isNotBlank()) append(" · 有默认入口")
+                                else append(" · 需自行输入教务网址")
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

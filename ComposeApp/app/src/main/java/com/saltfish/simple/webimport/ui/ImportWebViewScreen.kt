@@ -8,6 +8,8 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -95,6 +98,8 @@ fun ImportWebViewScreen(
     var pendingInject by remember { mutableStateOf(false) }
     // 桌面模式：教务/CAS 页面按 PC 设计，手机 UA 常被拒或排版错乱；默认开启
     var desktopMode by remember { mutableStateOf(true) }
+    // 地址栏：通用适配器无默认入口，用户自行输入教务网址；随页面导航更新
+    var urlInput by remember { mutableStateOf(adapter.importUrl) }
 
     fun applyDesktopMode(wv: WebView, desktop: Boolean) {
         wv.settings.userAgentString = if (desktop) DESKTOP_USER_AGENT
@@ -178,6 +183,13 @@ fun ImportWebViewScreen(
     BackHandler(enabled = true) {
         val wv = webViewRef
         if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
+    }
+
+    fun goToUrl(raw: String) {
+        val t = raw.trim()
+        if (t.isEmpty()) return
+        val url = if (t.startsWith("http://") || t.startsWith("https://")) t else "https://$t"
+        webViewRef?.loadUrl(url)
     }
 
     fun injectAdapter() {
@@ -265,6 +277,25 @@ fun ImportWebViewScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            // 地址栏：适配器无默认入口（通用适配器）时尤其关键
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    placeholder = { Text("输入教务系统网址", style = MaterialTheme.typography.bodySmall) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { goToUrl(urlInput) }),
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { goToUrl(urlInput) }) { Text("前往") }
+            }
             if (progress < 100) {
                 LinearProgressIndicator(
                     progress = { progress / 100f },
@@ -303,6 +334,7 @@ fun ImportWebViewScreen(
                             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                                 super.onPageStarted(view, url, favicon)
                                 android.util.Log.i("WebImport", "页面加载: $url")
+                                urlInput = url
                                 // 新页面 = 新 JS 全局作用域，重复注入守卫复位
                                 injectedAtTable = null
                                 // 每次导航都确保桥已挂载（脚本幂等）

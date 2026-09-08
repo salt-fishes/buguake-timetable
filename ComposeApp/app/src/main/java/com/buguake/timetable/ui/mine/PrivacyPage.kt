@@ -174,7 +174,6 @@ fun PrivacyPage(
             }
 
             Spacer(Modifier.height(20.dp))
-            Spacer(Modifier.height(20.dp))
             SectionTitle("校园开门（云莓模块）")
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -210,7 +209,7 @@ fun PrivacyPage(
                         "• 支持 Android 8.0 及以上系统\n" +
                             "• 背景模糊与动态取色需要 Android 12 及以上，低版本自动降级，不影响核心功能\n" +
                             "• 荣耀 / 华为等系统日历没有 .ics 文件导入入口，推荐使用应用内「同步到系统日历」直接写入\n" +
-                            "• 教务网页导入能力正在开发中，将基于开源社区的学校适配脚本持续扩充覆盖范围",
+                            "• 教务网页导入已上线，基于开源社区的学校适配脚本持续扩充覆盖范围",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -25,8 +25,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,12 +36,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,10 +58,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.buguake.timetable.R
+import com.buguake.timetable.data.UpdateChecker
 import com.buguake.timetable.ui.theme.AppMotion
+import kotlinx.coroutines.launch
 
 /** 更新记录数据：新版本在前。 */
 private val CHANGELOG: List<Pair<String, List<String>>> = listOf(
+    "1.0" to listOf(
+        "版本号正式升级为 1.0",
+        "宿舍开门支持快速开锁：记住门锁真实 MAC，失败自动回退扫描",
+        "新增「数据详情」页：展示登录后获取的账号 / 学校 / 门锁数据，默认脱敏",
+        "底部导航「校园」换用学校图标；关于页新增手动「检查更新」",
+        "隐私政策与联网说明按实际行为重新校正",
+    ),
     "0.1.0" to listOf(
         "自简课表派生：保留多课表 / 周视图 / 小组件 / 提醒 / 日历同步 / 课表对比",
         "教务网页导入上线：学校列表、统一身份登录、一键导入（基于拾光开源适配生态）",
@@ -85,6 +98,34 @@ fun AboutPage(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var updateResult by remember { mutableStateOf<UpdateResult?>(null) }
+
+    // ---- 「检查更新」结果弹窗：手动触发，不做任何后台轮询 ----
+    updateResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = { updateResult = null },
+            title = { Text(result.title) },
+            text = { Text(result.message) },
+            confirmButton = {
+                if (result.url != null) {
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, result.url.toUri()))
+                        }
+                        updateResult = null
+                    }) { Text("前往下载") }
+                } else {
+                    TextButton(onClick = { updateResult = null }) { Text("知道了") }
+                }
+            },
+            dismissButton = if (result.url != null) {
+                { TextButton(onClick = { updateResult = null }) { Text("稍后") } }
+            } else null,
+        )
+    }
+
     Scaffold(
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,
@@ -144,7 +185,7 @@ fun AboutPage(
             SectionTitle("主要功能")
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth()) {
-                    FeatureRow("教务网页导入", "选择学校登录教务，一键导入课程、周次、地点与教师（覆盖 190+ 学校/教务系统）")
+                    FeatureRow("教务网页导入", "选择学校登录教务，一键导入课程、周次、地点与教师（基于开源适配生态，持续扩充覆盖范围）")
                     CardDivider()
                     FeatureRow("多课表管理", "班级课表 / 个人课表 / 同学的课表并存，随时切换")
                     CardDivider()
@@ -333,6 +374,64 @@ fun AboutPage(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable(enabled = !checkingUpdate) {
+                                checkingUpdate = true
+                                scope.launch {
+                                    updateResult = runCatching { UpdateChecker.check(versionName) }
+                                        .fold(
+                                            onSuccess = { info ->
+                                                if (info == null) {
+                                                    UpdateResult(
+                                                        "已是最新版本",
+                                                        "当前版本 v$versionName 已是最新，无需更新。",
+                                                        null,
+                                                    )
+                                                } else {
+                                                    UpdateResult(
+                                                        "发现新版本 v${info.version}",
+                                                        info.notes.ifBlank { info.name },
+                                                        info.url,
+                                                    )
+                                                }
+                                            },
+                                            onFailure = { e ->
+                                                UpdateResult(
+                                                    "检查更新失败",
+                                                    "无法连接 GitHub：${e.message ?: "未知错误"}",
+                                                    null,
+                                                )
+                                            },
+                                        )
+                                    checkingUpdate = false
+                                }
+                            }
+                            .padding(vertical = 10.dp),
+                    ) {
+                        Text(
+                            "检查更新",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (checkingUpdate) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        } else {
+                            Text(
+                                "当前 v$versionName",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
                             .clickable {
                                 runCatching {
                                     context.startActivity(
@@ -448,3 +547,10 @@ private fun InfoRow(key: String, value: String) {
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
+
+/** 「检查更新」结果弹窗数据；url 非空时可跳转下载。 */
+private data class UpdateResult(
+    val title: String,
+    val message: String,
+    val url: String?,
+)

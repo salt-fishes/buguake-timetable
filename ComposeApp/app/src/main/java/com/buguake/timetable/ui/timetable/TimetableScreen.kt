@@ -234,7 +234,7 @@ fun TimetableScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "教务网页导入能力正在开发中",
+                        "教务网页导入已上线，更多学校持续适配中",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

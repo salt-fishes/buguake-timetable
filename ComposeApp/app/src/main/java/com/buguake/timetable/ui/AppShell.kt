@@ -71,7 +71,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.buguake.timetable.ui.theme.AppMotion
 import com.buguake.timetable.ui.theme.Haptics
-import com.buguake.timetable.ui.theme.LockIcon
+import com.buguake.timetable.ui.theme.CampusIcon
 import com.buguake.timetable.data.CalendarSync
 import com.buguake.timetable.data.EntryWithCourse
 import com.buguake.timetable.data.ScheduleRepository
@@ -630,7 +630,7 @@ private data class MoveReq(
                                     when (i) {
                                         0 -> Icons.Filled.Home
                                         1 -> Icons.AutoMirrored.Filled.List
-                                        2 -> LockIcon
+                                        2 -> CampusIcon
                                         else -> Icons.Filled.Settings
                                     },
                                     contentDescription = label,

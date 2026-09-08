@@ -52,6 +52,18 @@ class CampusStore private constructor(context: Context) {
         prefs.edit().clear().apply()
     }
 
+    /**
+     * 记录某把门锁真实蓝牙 MAC（扫描连接成功后学得）。
+     * 服务端下发的 lockNo 并非 MAC，直连会失败；学到真实 MAC 后即可跳过扫描快速开门。
+     */
+    fun saveLearnedMac(label: String, mac: String) {
+        if (label.isBlank() || mac.isBlank()) return
+        prefs.edit().putString(K_MAC_PREFIX + label, mac).apply()
+    }
+
+    /** 已学到的真实 MAC；未学过返回空串。 */
+    fun learnedMac(label: String): String = prefs.getString(K_MAC_PREFIX + label, "") ?: ""
+
     companion object {
         private const val K_ACCOUNT = "account"
         private const val K_PWD_MD5 = "password_md5"
@@ -61,6 +73,7 @@ class CampusStore private constructor(context: Context) {
         private const val K_SCHOOL_NAME = "school_name"
         private const val K_SERVER_URL = "server_url"
         private const val K_SCHOOL_TOKEN = "school_token"
+        private const val K_MAC_PREFIX = "mac_"
 
         @Volatile private var INSTANCE: CampusStore? = null
 

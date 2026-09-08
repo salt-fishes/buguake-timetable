@@ -36,8 +36,8 @@ data class UnlockUiState(
 )
 
 /**
- * 蓝牙开门执行器：扫描（按服务 UUID 过滤）/ MAC 直连 → 发现服务 → 订阅 notify →
- * 写开门指令 → 完成（随后断开）。
+ * 蓝牙开门执行器：优先用已学到的真实 MAC 快速直连；连不上/掉线/超时自动回退扫描。
+ * 扫描连接成功后记住真实 MAC，下次即可跳过扫描快速开门。
  *
  * 指令格式移植自 zxy19/yunmei_unintelligent（MIT）UnlockService.getPwd：
  * 0xD0, len=secret.len+14, secret, 0xA5, 6 位随机数字（每字节一位）, "ID01", 0xA7。
@@ -71,29 +71,50 @@ class BleUnlocker(private val context: Context) {
         val adapter = bluetoothAdapter() ?: throw YunmeiException("设备不支持蓝牙")
         if (!adapter.isEnabled) throw YunmeiException("请先开启蓝牙")
 
-        val written = CompletableDeferred<Unit>()
-        val gatt = if (lock.mac.isNotBlank()) {
+        val store = CampusStore.getInstance(context)
+        val knownMac = store.learnedMac(lock.label).ifBlank { lock.mac }
+
+        if (knownMac.isNotBlank()) {
             setPhase("快速连接中…")
-            // 快速直连失败（连不上/掉线/超时）自动回退扫描
-            try {
-                connectGatt(adapter.getRemoteDevice(lock.mac), lock, written)
+            val ok = try {
+                connectAndWrite(adapter.getRemoteDevice(knownMac), lock)
+                true
             } catch (t: Throwable) {
-                setPhase("快速连接失败，改用扫描…")
-                connectGatt(scanFirstDevice(adapter, lock).device, lock, written)
+                false
             }
-        } else {
-            connectGatt(scanFirstDevice(adapter, lock).device, lock, written)
+            if (ok) {
+                persistMac(store, lock, knownMac)
+                return
+            }
+            setPhase("快速连接失败，改用扫描…")
         }
 
-        setPhase("写入开门指令…")
-        val ok = withTimeoutOrNull(12_000) { written.await() }
-        if (ok == null) {
-            runCatching { gatt.disconnect(); gatt.close() }
-            throw YunmeiException("开门超时，请靠近宿舍门重试")
+        val scanned = scanFirstDevice(adapter, lock)
+        connectAndWrite(scanned.device, lock)
+        persistMac(store, lock, scanned.device.address)
+    }
+
+    /** 连接 → 订阅 → 写指令 → 断开；任一步失败抛出异常，供上层回退扫描。 */
+    @SuppressLint("MissingPermission")
+    private suspend fun connectAndWrite(device: android.bluetooth.BluetoothDevice, lock: YmLock) {
+        val written = CompletableDeferred<Unit>()
+        val gatt = connectGatt(device, lock, written)
+        try {
+            setPhase("写入开门指令…")
+            val ok = withTimeoutOrNull(12_000) { written.await() }
+            if (ok == null) throw YunmeiException("开门超时，请靠近宿舍门重试")
+            // 留出门锁执行时间，随后断开
+            delay(600)
+        } finally {
+            withContext(Dispatchers.IO) { runCatching { gatt.disconnect(); gatt.close() } }
         }
-        // 留出门锁执行时间，随后断开
-        delay(600)
-        withContext(Dispatchers.IO) { runCatching { gatt.disconnect(); gatt.close() } }
+    }
+
+    /** 记住真实 MAC，下次即可跳过扫描直连。 */
+    private fun persistMac(store: CampusStore, lock: YmLock, mac: String) {
+        if (mac.isBlank()) return
+        lock.mac = mac
+        if (store.learnedMac(lock.label) != mac) runCatching { store.saveLearnedMac(lock.label, mac) }
     }
 
     private fun setPhase(text: String) {

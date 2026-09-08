@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,6 +59,9 @@ fun CampusUnlockScreen(
 
     // 待执行的开门请求（等待权限/蓝牙就绪后继续）
     var pendingUnlock by remember { mutableStateOf<YmLock?>(null) }
+
+    // 数据详情页开关
+    var showData by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -186,6 +190,21 @@ fun CampusUnlockScreen(
         store.load()?.let { saved -> doLogin(saved) }
     }
 
+    // 数据详情页（二级覆盖）
+    if (showData) {
+        CampusDataScreen(
+            account = client?.session?.account ?: account,
+            session = client?.session,
+            school = client?.school,
+            schoolToken = client?.schoolToken ?: "",
+            locks = locks.orEmpty(),
+            learnedMac = { store.learnedMac(it.label) },
+            glass = glass,
+            onBack = { showData = false },
+        )
+        return
+    }
+
     Scaffold(containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
     else MaterialTheme.colorScheme.surface) { padding ->
         Column(
@@ -213,6 +232,11 @@ fun CampusUnlockScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                if (locks != null) {
+                    IconButton(onClick = { showData = true }) {
+                        Icon(Icons.Filled.Info, contentDescription = "数据详情")
+                    }
                 }
             }
 

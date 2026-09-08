@@ -66,7 +66,11 @@ class WebBridgeHandler(
     private val settings: ScheduleSettings? get() = settingsRepo.current
 
     fun onMessageReceived(jsonString: String) {
-        val message = JsBridgeMessage.parse(jsonString) ?: return
+        val message = JsBridgeMessage.parse(jsonString) ?: run {
+            android.util.Log.w(TAG, "桥消息解析失败: ${jsonString.take(200)}")
+            return
+        }
+        android.util.Log.i(TAG, "桥动作: ${message.action} callbackId=${message.callbackId}")
         val callbackId = message.callbackId
         when (message.action) {
             "showToast" -> parseShowToast(message.payload)?.let { showToast(it.message) }
@@ -160,6 +164,10 @@ class WebBridgeHandler(
                     scheduleRepo.importSchedule(parsed, tableId)
                     report
                 }
+            val logDetail = result.getOrNull()
+                ?.let { "imported=${it.imported} skipped=${it.skipped}" }
+                ?: (result.exceptionOrNull()?.message ?: "unknown")
+            android.util.Log.i(TAG, "saveImportedCourses: success=${result.isSuccess} $logDetail")
             withContext(Dispatchers.Main) {
                 result.onSuccess { report ->
                     lastImportedCourseCount = report.imported
@@ -259,9 +267,14 @@ class WebBridgeHandler(
     }
 
     private fun rejectJsPromise(callbackId: String, errorText: String) {
+        android.util.Log.w(TAG, "Promise reject[$callbackId]: $errorText")
         val safeErrorJson = JSONObject.quote(errorText)
         scope.launch(Dispatchers.Main) {
             evaluateJs(buildJsCallbackScript(callbackId, isSuccess = false, resultRawJs = safeErrorJson), null)
         }
+    }
+
+    companion object {
+        private const val TAG = "WebImport"
     }
 }

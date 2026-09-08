@@ -77,6 +77,7 @@ class RepoSyncManager(
                     }
                     return@withContext Result.success(body)
                 } catch (e: Exception) {
+                    android.util.Log.w("WebImport", "镜像下载失败: $url → ${e.message}")
                     errors.add("$url → ${e.message}")
                 }
             }
@@ -99,6 +100,7 @@ class RepoSyncManager(
     ): Result<IndexRefresh> = runCatching {
         val bytes = download(repo, repo.indexBranch, INDEX_PATH).getOrThrow()
         val index = SchoolIndexDecoder.decode(bytes)
+        android.util.Log.i("WebImport", "索引下载成功: v${index.protocolVersion} ${index.versionId}，${index.schools.size} 校")
         if (index.versionId.isBlank()) throw IOException("索引缺少 version_id，数据异常")
 
         val existing = cachedIndex(repo)
@@ -156,6 +158,7 @@ class RepoSyncManager(
         val file = scriptFile(repo, schoolFolder, jsPath)
         if (file.exists()) return@runCatching file.readText()
         val bytes = download(repo, repo.mainBranch, "resources/$schoolFolder/$jsPath").getOrThrow()
+        android.util.Log.i("WebImport", "适配器脚本下载成功: $schoolFolder/$jsPath (${bytes.size}B)")
         val text = String(bytes, Charsets.UTF_8)
         if (!text.contains("shiguangBridge") && !text.contains("AndroidBridge")) {
             throw IOException("脚本内容异常（缺少桥协议调用），已拒绝缓存")

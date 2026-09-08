@@ -27,8 +27,8 @@ android {
         applicationId = "com.buguake.timetable"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0"
 
         // 仅保留 arm64-v8a（已无原生库依赖，收窄以备将来）
         ndk {

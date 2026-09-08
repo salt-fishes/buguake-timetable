@@ -401,7 +401,7 @@ fun MineScreen(
                     trailing = "版本 ${com.buguake.timetable.BuildConfig.VERSION_NAME}",
                 ) { onOpenAbout() }
                 CardDivider()
-                ActionRow("隐私政策", trailing = "不联网 · 不收集") { onOpenPrivacy() }
+                ActionRow("隐私政策", trailing = "无广告") { onOpenPrivacy() }
             }
         }
     }

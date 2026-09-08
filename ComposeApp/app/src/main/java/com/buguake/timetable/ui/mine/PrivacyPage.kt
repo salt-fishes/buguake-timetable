@@ -190,12 +190,12 @@ fun PrivacyPage(
             }
 
             Spacer(Modifier.height(20.dp))
-            SectionTitle("唯一的对外数据出口")
+            SectionTitle("课表分享")
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(
-                        "只有一种情况数据会离开本应用：你主动点击「分享」时，应用把生成的课表图片交给" +
-                            "系统分享面板中你选择的应用（如微信、QQ）处理。除此之外不存在任何数据出口。",
+                        "你主动点击「分享」时，应用把生成的课表图片交给系统分享面板中你选择的应用" +
+                            "（如微信、QQ）处理，本应用不保存分享内容。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -227,7 +227,7 @@ fun PrivacyPage(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "本政策如有更新，将在应用内「关于」页同步展示最新版本。\n更新日期：2026-09-03（随 v1.7 更新）",
+                        "本政策如有更新，将在应用内「关于」页同步展示最新版本。\n更新日期：2026-09-08（随 v1.0 更新）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

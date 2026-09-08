@@ -291,8 +291,7 @@ fun AboutPage(
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(
-                        "• 全程离线运行，不联网、不收集任何数据\n" +
-                            "• 课程自动识别，省去手动录入\n" +
+                        "• 课程自动识别，省去手动录入\n" +
                             "• 界面简洁，Material You 设计",
                         style = MaterialTheme.typography.bodyMedium,
                     )

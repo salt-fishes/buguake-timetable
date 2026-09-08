@@ -1,7 +1,10 @@
 package com.saltfish.simple.webimport.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -176,6 +179,7 @@ fun SchoolSelectionScreen(
                 shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -301,16 +305,37 @@ fun SchoolSelectionScreen(
                                 }
                             }
                         }
-                        // 右侧字母导航条：点击跳到对应首字母分组（含最近访问区块偏移）
+                        // 右侧字母导航条：点击或上下拖动跳转（含最近访问区块偏移）
                         if (letterFirstIndex.isNotEmpty() && query.isBlank()) {
+                            val letters = letterFirstIndex.keys.toList()
+                            var railHeight by remember { mutableStateOf(0f) }
+                            fun jumpTo(idx: Int) {
+                                if (idx !in letters.indices) return
+                                letterFirstIndex[letters[idx]]?.let { i ->
+                                    scope.launch { listState.scrollToItem(i + recentBlockCount) }
+                                }
+                            }
                             Column(
                                 Modifier
                                     .align(Alignment.CenterEnd)
                                     .widthIn(max = 26.dp)
+                                    .onSizeChanged { railHeight = it.height.toFloat() }
+                                    .pointerInput(letters, recentBlockCount) {
+                                        detectVerticalDragGestures { change, _ ->
+                                            change.consume()
+                                            if (railHeight > 0f) {
+                                                jumpTo(
+                                                    ((change.position.y / railHeight) * letters.size)
+                                                        .toInt()
+                                                        .coerceIn(0, letters.size - 1)
+                                                )
+                                            }
+                                        }
+                                    }
                                     .padding(vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                letterFirstIndex.keys.forEach { letter ->
+                                letters.forEach { letter ->
                                     Text(
                                         letter,
                                         fontSize = 10.sp,

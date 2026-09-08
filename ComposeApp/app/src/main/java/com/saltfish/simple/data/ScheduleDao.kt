@@ -164,6 +164,12 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedule_entries WHERE courseId = :courseId")
     suspend fun getEntriesOfCourse(courseId: Long): List<ScheduleEntryEntity>
 
+    @Query("SELECT * FROM schedule_entries WHERE id = :entryId")
+    suspend fun getEntryById(entryId: Long): ScheduleEntryEntity?
+
+    @Query("UPDATE schedule_entries SET weeksCsv = :weeksCsv WHERE id = :entryId")
+    suspend fun updateEntryWeeks(entryId: Long, weeksCsv: String)
+
     /** 整体替换课表（导入覆盖）：事务内清空指定课表再写入；每个课程携带其条目列表。 */
     @Deprecated("改用 replaceTimetable（多课表）", ReplaceWith("replaceTimetable(timetableId, items)"))
     @Transaction

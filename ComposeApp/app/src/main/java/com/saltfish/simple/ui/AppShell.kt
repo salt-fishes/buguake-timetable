@@ -17,6 +17,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +108,15 @@ import kotlin.math.roundToInt
 
 private val TAB_LABELS = listOf("课表", "今日", "我的")
 
+/** 待确认的调课请求：范围（以后每周/仅本周）由用户在弹窗中选择。 */
+private data class MoveReq(
+    val entry: com.saltfish.simple.data.EntryWithCourse,
+    val day: Int,
+    val start: Int,
+    val end: Int,
+    val week: Int,
+)
+
 /** 应用外壳：底部导航三页 + 全局状态。 */
     @OptIn(
         kotlinx.coroutines.ExperimentalCoroutinesApi::class,
@@ -147,6 +157,7 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
     var widgetBindRefresh by remember { mutableIntStateOf(0) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
     var showWebImport by rememberSaveable { mutableStateOf(false) }
+    var pendingMove by remember { mutableStateOf<MoveReq?>(null) }
     var compareTimetables by remember { mutableStateOf<List<CompareTimetable>>(emptyList()) }
     var pendingOccupancy by remember { mutableStateOf<OccupancyDetection?>(null) }
     // 网页导入预留：解析结果确认弹窗与入库流程（Phase 5/6 接线）
@@ -604,7 +615,10 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
                                 Modifier
                                     .width(slot)
                                     .fillMaxHeight()
-                                    .clickable {
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,  // 底栏去水波纹
+                                    ) {
                                         tab = i
                                         Haptics.tick(context)  // 页签切换轻震
                                     },
@@ -685,21 +699,8 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
                     onShowSnackbar = showSnackbar,
                     onImportClick = { showWebImport = true },
                     onAddClick = { showAddCourse = true },
-                    onMoveEntry = { entry, day, start, end ->
-                        scope.launch {
-                            runCatching {
-                                kotlinx.coroutines.withContext(Dispatchers.IO) {
-                                    scheduleRepo.moveEntry(entry.entryId, day, start, end)
-                                }
-                            }.onSuccess {
-                                AppRefresh.onDataChanged(context)
-                                Haptics.heavy(context)  // 调课落位强反馈
-                                val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-                                showSnackbar("已移动至${dayNames[day - 1]} 第 $start-$end 节")
-                            }.onFailure {
-                                showSnackbar("移动失败：${it.message ?: "未知错误"}")
-                            }
-                        }
+                    onMoveEntry = { entry, day, start, end, week ->
+                        pendingMove = MoveReq(entry, day, start, end, week)
                     },
                     timetables = timetableInfos,
                     onSwitchTimetable = { id ->
@@ -736,6 +737,8 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
                         AppRefresh.onDataChanged(context)  // 周末开关影响小组件与提醒
                     },
                     onSetShowNonCurrentWeek = { settingsRepo.setShowNonCurrentWeek(it) },
+                    onSetShowTeacherOnBlock = { settingsRepo.setShowTeacherOnBlock(it) },
+                    onSetShowLocationOnBlock = { settingsRepo.setShowLocationOnBlock(it) },
                     onSetDynamicColor = { settingsRepo.setDynamicColor(it) },
                     onSetDarkMode = { settingsRepo.setDarkMode(it) },
                     onOpenSectionTimes = { showSectionTimes = true },
@@ -889,6 +892,57 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
             timetables = timetableInfos,
             onConfirm = confirmNewTimetable,
             onDismiss = { showNewTimetableDialog = false },
+        )
+    }
+
+    // ---- 调课范围确认：以后每周 / 仅本周 ----
+    pendingMove?.let { m ->
+        val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingMove = null },
+            title = { Text("调整课程") },
+            text = {
+                Text("把《${m.entry.courseName}》移到${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节。调整范围是？")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingMove = null
+                    scope.launch {
+                        runCatching {
+                            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                scheduleRepo.moveEntryScoped(
+                                    m.entry.entryId, m.day, m.start, m.end, m.week, false,
+                                )
+                            }
+                        }.onSuccess {
+                            AppRefresh.onDataChanged(context)
+                            Haptics.heavy(context)
+                            showSnackbar("已调整（以后每周）：${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节")
+                        }.onFailure { showSnackbar("调整失败：${it.message ?: "未知错误"}") }
+                    }
+                }) { Text("以后每周") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        pendingMove = null
+                        scope.launch {
+                            runCatching {
+                                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                    scheduleRepo.moveEntryScoped(
+                                        m.entry.entryId, m.day, m.start, m.end, m.week, true,
+                                    )
+                                }
+                            }.onSuccess {
+                                AppRefresh.onDataChanged(context)
+                                Haptics.heavy(context)
+                                showSnackbar("已调整（仅第 ${m.week} 周）：${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节")
+                            }.onFailure { showSnackbar("调整失败：${it.message ?: "未知错误"}") }
+                        }
+                    }) { Text("仅本周") }
+                    TextButton(onClick = { pendingMove = null }) { Text("取消") }
+                }
+            },
         )
     }
 
@@ -1229,6 +1283,8 @@ private fun defaultSettings(): ScheduleSettings =
         totalWeeks = com.saltfish.simple.data.SettingsRepository.DEFAULT_TOTAL_WEEKS,
         showWeekend = true,
         showNonCurrentWeek = false,
+        showTeacherOnBlock = true,
+        showLocationOnBlock = true,
         dynamicColor = false,
         darkMode = "system",
         sectionTimes = com.saltfish.simple.data.SettingsRepository.DEFAULT_SECTION_TIMES.take(12),

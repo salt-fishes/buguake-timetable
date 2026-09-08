@@ -31,6 +31,8 @@ data class ScheduleSettings(
     val totalWeeks: Int,              // 活动课表总周数（默认 17）
     val showWeekend: Boolean,         // 显示周末列（默认开）
     val showNonCurrentWeek: Boolean,  // 显示非本周课程（默认关，淡化展示）
+    val showTeacherOnBlock: Boolean,  // 课程块显示教师（默认开）
+    val showLocationOnBlock: Boolean, // 课程块显示地点（默认开）
     val dynamicColor: Boolean,        // 动态取色（API 31+，默认关）
     val darkMode: String,             // system / light / dark
     val sectionTimes: List<SectionTime>,
@@ -178,6 +180,8 @@ class SettingsRepository private constructor(context: Context) {
     }
 
     fun setShowWeekend(value: Boolean) = prefs.edit().putBoolean(KEY_SHOW_WEEKEND, value).apply()
+    fun setShowTeacherOnBlock(value: Boolean) = prefs.edit().putBoolean(KEY_SHOW_TEACHER_ON_BLOCK, value).apply()
+    fun setShowLocationOnBlock(value: Boolean) = prefs.edit().putBoolean(KEY_SHOW_LOCATION_ON_BLOCK, value).apply()
 
     fun setShowNonCurrentWeek(value: Boolean) =
         prefs.edit().putBoolean(KEY_SHOW_NON_CURRENT, value).apply()
@@ -240,6 +244,8 @@ class SettingsRepository private constructor(context: Context) {
             totalWeeks = prefs.getInt(KEY_TOTAL_WEEKS, DEFAULT_TOTAL_WEEKS).coerceIn(8, 30),
             showWeekend = prefs.getBoolean(KEY_SHOW_WEEKEND, true),
             showNonCurrentWeek = prefs.getBoolean(KEY_SHOW_NON_CURRENT, false),
+            showTeacherOnBlock = prefs.getBoolean(KEY_SHOW_TEACHER_ON_BLOCK, true),
+            showLocationOnBlock = prefs.getBoolean(KEY_SHOW_LOCATION_ON_BLOCK, true),
             dynamicColor = prefs.getBoolean(KEY_DYNAMIC_COLOR, false),
             darkMode = prefs.getString(KEY_DARK_MODE, "system") ?: "system",
             sectionTimes = times,
@@ -260,6 +266,8 @@ class SettingsRepository private constructor(context: Context) {
         private const val KEY_ACTIVE_TIMETABLE = "active_timetable_id"
         private const val KEY_WIDGET_TIMETABLE = "widget_timetable_"
         private const val KEY_SHOW_WEEKEND = "show_weekend"
+        private const val KEY_SHOW_TEACHER_ON_BLOCK = "show_teacher_on_block"
+        private const val KEY_SHOW_LOCATION_ON_BLOCK = "show_location_on_block"
         private const val KEY_SHOW_NON_CURRENT = "show_non_current_week"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         private const val KEY_DARK_MODE = "dark_mode"

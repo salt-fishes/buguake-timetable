@@ -146,6 +146,42 @@ class ScheduleRepository(private val dao: ScheduleDao) {
     suspend fun deleteEntry(entryId: Long) = dao.deleteEntry(entryId)
 
     /**
+     * 调课（范围可选）：
+     * - 整学期：直接更新星期与节次；
+     * - 仅本周：原条目从该周周次中移除，另建一条仅含该周、位于新位置的条目；
+     *   若原条目只剩该周，等价于整学期移动。
+     */
+    suspend fun moveEntryScoped(
+        entryId: Long,
+        newDay: Int,
+        newStart: Int,
+        newEnd: Int,
+        week: Int,
+        thisWeekOnly: Boolean,
+    ) {
+        val e = dao.getEntryById(entryId) ?: return
+        if (!thisWeekOnly) {
+            dao.updateEntryTime(entryId, newDay, newStart, newEnd)
+            return
+        }
+        val weeks = e.weeksCsv.split(",").mapNotNull { it.trim().toIntOrNull() }
+        if (week !in weeks || weeks.size <= 1) {
+            dao.updateEntryTime(entryId, newDay, newStart, newEnd)
+            return
+        }
+        dao.updateEntryWeeks(entryId, weeks.filter { it != week }.sorted().joinToString(","))
+        dao.insertEntry(
+            e.copy(
+                id = 0,
+                dayOfWeek = newDay,
+                startSection = newStart,
+                endSection = newEnd,
+                weeksCsv = week.toString(),
+            )
+        )
+    }
+
+    /**
      * 新增一条排课（课表内课程名已存在则复用，否则新建课程）。
      * @return 新增条目的 id
      */

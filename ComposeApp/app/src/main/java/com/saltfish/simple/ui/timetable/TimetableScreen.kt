@@ -136,7 +136,7 @@ fun TimetableScreen(
     onShowSnackbar: (String) -> Unit,
     onImportClick: () -> Unit = {},
     onAddClick: () -> Unit = {},
-    onMoveEntry: (EntryWithCourse, Int, Int, Int) -> Unit = { _, _, _, _ -> },
+    onMoveEntry: (EntryWithCourse, Int, Int, Int, Int) -> Unit = { _, _, _, _, _ -> },
     timetables: List<TimetableInfo> = emptyList(),
     onSwitchTimetable: (Long) -> Unit = {},
     onNewTimetable: () -> Unit = {},   // 自动新建未命名课表并进入导入流程
@@ -465,6 +465,8 @@ fun TimetableScreen(
                     today = today,
                     sectionTimes = settings.sectionTimes,
                     showNonCurrentWeek = settings.showNonCurrentWeek,
+                    showTeacherOnBlock = settings.showTeacherOnBlock,
+                    showLocationOnBlock = settings.showLocationOnBlock,
                     dynamicColor = dynamicColor,
                     glass = glass,
                     onCourseClick = onCourseClick,
@@ -710,10 +712,12 @@ private fun WeekGridPage(
     today: LocalDate,
     sectionTimes: List<SectionTime>,
     showNonCurrentWeek: Boolean,
+    showTeacherOnBlock: Boolean,
+    showLocationOnBlock: Boolean,
     dynamicColor: Boolean,
     glass: Boolean,
     onCourseClick: (EntryWithCourse) -> Unit,
-    onMoveEntry: (EntryWithCourse, Int, Int, Int) -> Unit,
+    onMoveEntry: (EntryWithCourse, Int, Int, Int, Int) -> Unit,
 ) {
     val density = LocalDensity.current
     val rowHeightPx = with(density) { ROW_HEIGHT.toPx() }
@@ -762,7 +766,7 @@ private fun WeekGridPage(
         }
         if (finalStart >= 1) {
             bounceEntryId = d.entry.entryId  // 落位后目标块弹入一次
-            onMoveEntry(d.entry, newDay, finalStart, finalStart + dur)
+            onMoveEntry(d.entry, newDay, finalStart, finalStart + dur, week)
         }
     }
 
@@ -784,6 +788,8 @@ private fun WeekGridPage(
                     isToday = isCurrentWeek && today.dayOfWeek.value == d,
                     sectionTimes = sectionTimes,
                     showNonCurrentWeek = showNonCurrentWeek,
+                    showTeacherOnBlock = showTeacherOnBlock,
+                    showLocationOnBlock = showLocationOnBlock,
                     dynamicColor = dynamicColor,
                     glass = glass,
                     draggedEntryId = drag?.entry?.entryId,
@@ -880,6 +886,8 @@ private fun DayColumn(
     isToday: Boolean,
     sectionTimes: List<SectionTime>,
     showNonCurrentWeek: Boolean,
+    showTeacherOnBlock: Boolean,
+    showLocationOnBlock: Boolean,
     dynamicColor: Boolean,
     glass: Boolean,
     draggedEntryId: Long?,
@@ -924,6 +932,8 @@ private fun DayColumn(
                 var blockCoords by remember(entry.entryId) { mutableStateOf<LayoutCoordinates?>(null) }
                 CourseBlock(
                     entry = entry,
+                    showTeacher = showTeacherOnBlock,
+                    showLocation = showLocationOnBlock,
                     dimmed = !entry.isInWeek(week),
                     isDragging = draggedEntryId == entry.entryId,
                     bounce = bounceEntryId == entry.entryId,
@@ -991,6 +1001,8 @@ private fun clusterByOverlap(
 @Composable
 private fun CourseBlock(
     entry: EntryWithCourse,
+    showTeacher: Boolean = true,
+    showLocation: Boolean = true,
     dimmed: Boolean,
     dynamicColor: Boolean,
     glass: Boolean,
@@ -1111,11 +1123,13 @@ private fun CourseBlock(
                         maxLines = 6,
                     )
                     val location = condensedLocation(entry)
-                    if (location.isNotBlank() || entry.teacher.isNotBlank()) {
+                    val t = if (showTeacher) entry.teacher else ""
+                    val l = if (showLocation) location else ""
+                    if (t.isNotBlank() || l.isNotBlank()) {
                         Text(
                             text = buildString {
-                                if (entry.teacher.isNotBlank()) append(entry.teacher)
-                                if (location.isNotBlank()) append("@").append(location)
+                                if (t.isNotBlank()) append(t)
+                                if (l.isNotBlank()) append(if (t.isNotBlank()) "@" else "").append(l)
                             },
                             fontSize = (nameSize * 0.82f).sp,
                             color = cs.onSurfaceVariant,
@@ -1137,9 +1151,9 @@ private fun CourseBlock(
                 width = 1.dp,
                 brush = androidx.compose.ui.graphics.Brush.linearGradient(
                     listOf(
-                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.42f),
-                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f),
-                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.20f),
+                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.72f),
+                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.14f),
+                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.40f),
                     )
                 ),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
@@ -1165,11 +1179,13 @@ private fun CourseBlock(
             Spacer(Modifier.height(2.dp))
             // 教师@地点（换行自然铺满块高）
             val location = condensedLocation(entry)
-            if (location.isNotBlank() || entry.teacher.isNotBlank()) {
+            val t = if (showTeacher) entry.teacher else ""
+            val l = if (showLocation) location else ""
+            if (t.isNotBlank() || l.isNotBlank()) {
                 Text(
                     text = buildString {
-                        if (entry.teacher.isNotBlank()) append(entry.teacher)
-                        if (location.isNotBlank()) append("@").append(location)
+                        if (t.isNotBlank()) append(t)
+                        if (l.isNotBlank()) append(if (t.isNotBlank()) "@" else "").append(l)
                     },
                     fontSize = (nameSize * 0.82f).sp,
                     color = onContainer.copy(alpha = 0.85f),

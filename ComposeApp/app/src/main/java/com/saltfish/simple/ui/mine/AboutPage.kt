@@ -163,7 +163,7 @@ fun AboutPage(
                     CardDivider()
                     FeatureRow("上课提醒", "课前 5/10/15/20 分钟本地通知，准点触发")
                     CardDivider()
-                    FeatureRow("个性化", "深色模式、动态取色、液态玻璃风格（卡顿可关闭）、自定义背景与作息时间")
+                    FeatureRow("个性化", "深色模式、动态取色、磨砂玻璃、自定义背景与作息时间")
                 }
             }
 

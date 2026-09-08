@@ -77,6 +77,7 @@ import com.saltfish.simple.data.SettingsRepository
 import com.saltfish.simple.data.TimetableEntity
 import com.saltfish.simple.reminder.AppRefresh
 import com.saltfish.simple.schedule.ParsedSchedule
+import com.saltfish.simple.webimport.ui.WebImportFlow
 import com.saltfish.simple.ui.mine.MineScreen
 import com.saltfish.simple.ui.timetable.NewTimetableDialog
 import com.saltfish.simple.ui.timetable.ImportChooseDialog
@@ -145,6 +146,7 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
     var showWidgetBind by rememberSaveable { mutableStateOf(false) }
     var widgetBindRefresh by remember { mutableIntStateOf(0) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
+    var showWebImport by rememberSaveable { mutableStateOf(false) }
     var compareTimetables by remember { mutableStateOf<List<CompareTimetable>>(emptyList()) }
     var pendingOccupancy by remember { mutableStateOf<OccupancyDetection?>(null) }
     // 网页导入预留：解析结果确认弹窗与入库流程（Phase 5/6 接线）
@@ -461,7 +463,7 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
 
     // ---- 系统手势/按键返回：覆盖页显示时返回先关闭覆盖页，回到原界面原位置 ----
     val overlayShown = showSectionTimes || showReminders || showAbout || showPrivacy ||
-        showTimetableManage || showWidgetBind || showCompare
+        showTimetableManage || showWidgetBind || showCompare || showWebImport
     androidx.activity.compose.BackHandler(enabled = overlayShown) {
         when {
             pendingOccupancy != null -> pendingOccupancy = null
@@ -681,9 +683,7 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
                     glass = glassOn,
                     onCourseClick = { selectedEntry = it },
                     onShowSnackbar = showSnackbar,
-                    onImportClick = {
-                        showSnackbar("教务网页导入开发中，敬请期待")
-                    },
+                    onImportClick = { showWebImport = true },
                     onAddClick = { showAddCourse = true },
                     onMoveEntry = { entry, day, start, end ->
                         scope.launch {
@@ -722,9 +722,7 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
                     glass = glassOn,
                     courseCount = courses.size,
                     entryCount = entries.size,
-                    onImport = {
-                        showSnackbar("教务网页导入开发中，敬请期待")
-                    },
+                    onImport = { showWebImport = true },
                     onSetSemesterStart = setSemesterStart,
                     onSetTotalWeeks = {
                         scope.launch {
@@ -985,6 +983,17 @@ private val TAB_LABELS = listOf("课表", "今日", "我的")
                 }
             },
             onBack = { showReminders = false },
+        )
+    }
+
+    // ---- 教务网页导入（全屏覆盖：学校 → 适配器 → WebView） ----
+    OverlayPage(showWebImport) {
+        WebImportFlow(
+            timetables = timetableInfos,
+            defaultStartMillis = settings.semesterStart,
+            defaultTotalWeeks = settings.totalWeeks,
+            glass = glassOn,
+            onClose = { showWebImport = false },
         )
     }
 

@@ -115,4 +115,6 @@ dependencies {
 
     // 单元测试
     testImplementation("junit:junit:4.13.2")
+    // org.json 的 JVM 实现：本地单测跑桥 JSON 解析（android.jar 桩是 not mocked）
+    testImplementation("org.json:json:20240303")
 }

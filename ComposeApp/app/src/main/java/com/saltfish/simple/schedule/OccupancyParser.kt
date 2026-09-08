@@ -3,13 +3,6 @@ package com.saltfish.simple.schedule
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
-import org.opencv.android.OpenCVLoader
-import org.opencv.android.Utils
-import org.opencv.core.Core
-import org.opencv.core.CvType
-import org.opencv.core.Mat
-import org.opencv.core.Scalar
-import org.opencv.imgproc.Imgproc
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -70,7 +63,6 @@ object OccupancyParser {
      * 工作图（内部降采样）与 Grid.rawRect 同坐标系，一并返回，调用方负责 recycle。
      */
     suspend fun parseWithWorkBitmap(context: Context, src: Bitmap): Pair<Grid, Bitmap> {
-        check(OpenCVLoader.initDebug()) { "图像处理组件初始化失败" }
         val work = downsample(src, 1600)
         val grid = try {
             parseByAnchors(context, work)
@@ -112,15 +104,15 @@ object OccupancyParser {
     private suspend fun parseByAnchors(context: Context, src: Bitmap): Grid {
         val W = src.width
         val H = src.height
-        val gray = Mat()
-        Utils.bitmapToMat(src, gray)
-        Imgproc.cvtColor(gray, gray, Imgproc.COLOR_RGBA2GRAY)
-        val px = ByteArray(W * H)
-        gray.get(0, 0, px)
-        gray.release()
-        val bgGray = medianByte(px)
         val pixels = IntArray(W * H)
         src.getPixels(pixels, 0, W, 0, 0, W, H)
+        // 纯 Kotlin 灰度（等价 OpenCV RGBA2GRAY：Y = 0.299R + 0.587G + 0.114B）
+        val px = ByteArray(W * H)
+        for (i in 0 until W * H) {
+            val p = pixels[i]
+            px[i] = ((((p ushr 16) and 0xFF) * 77 + ((p ushr 8) and 0xFF) * 150 + (p and 0xFF) * 29) ushr 8).toByte()
+        }
+        val bgGray = medianByte(px)
         val tableTopY = coloredTopRow(pixels, W, H)
         val axisEdge = coloredLeftEdge(pixels, W, H)
 
@@ -699,31 +691,16 @@ object OccupancyParser {
         val w = rx1 - rx0
         val h = ry1 - ry0
         if (w < 4 || h < 4) return emptyList()
-        val mask = Mat(h, w, CvType.CV_8UC1)
         val buf = ByteArray(w * h)
         for (y in 0 until h) {
             val rowOff = (ry0 + y) * W + rx0
             for (x in 0 until w) {
-                buf[y * w + x] = if (pred(px[rowOff + x].toInt() and 0xFF)) 0xFF.toByte() else 0
+                buf[y * w + x] = if (pred(px[rowOff + x].toInt() and 0xFF)) 1 else 0
             }
         }
-        mask.put(0, 0, buf)
-        val labels = Mat()
-        val stats = Mat()
-        val centroids = Mat()
-        val n = Imgproc.connectedComponentsWithStats(mask, labels, stats, centroids, 8)
-        mask.release(); labels.release(); centroids.release()
-        val out = mutableListOf<Comp>()
-        for (i in 1 until n) {
-            val x = stats.get(i, 0)[0].toInt()
-            val y = stats.get(i, 1)[0].toInt()
-            val cw = stats.get(i, 2)[0].toInt()
-            val ch = stats.get(i, 3)[0].toInt()
-            val area = stats.get(i, 4)[0].toInt()
-            out += Comp(rx0 + x, ry0 + y, rx0 + x + cw, ry0 + y + ch, area)
+        return connectedComponents(buf, w, h).map {
+            Comp(rx0 + it.x0, ry0 + it.y0, rx0 + it.x0 + it.w, ry0 + it.y0 + it.h, it.area)
         }
-        stats.release()
-        return out
     }
 
     private fun regionMedian(px: ByteArray, W: Int, x0: Int, y0: Int, x1: Int, y1: Int): Int {
@@ -886,6 +863,125 @@ object OccupancyParser {
     }
 
     // ------------------------------------------------------------------
+    // 纯 Kotlin 图像原语（替代 OpenCV：连通域 / 形态学）
+    // ------------------------------------------------------------------
+
+    /** 连通域统计（等价 connectedComponentsWithStats 的输出字段；x1/y1 为排他边界）。 */
+    private class CComp(val x0: Int, val y0: Int, val x1: Int, val y1: Int, val area: Int) {
+        val w get() = x1 - x0
+        val h get() = y1 - y0
+    }
+
+    /** 8 连通域标记：非零像素为前景，按扫描序返回各域外接框与像素面积。 */
+    private fun connectedComponents(mask: ByteArray, w: Int, h: Int): List<CComp> {
+        val visited = ByteArray(w * h)
+        val stack = IntArray(w * h)
+        val out = mutableListOf<CComp>()
+        for (start in 0 until w * h) {
+            if (mask[start].toInt() == 0 || visited[start].toInt() != 0) continue
+            var sp = 0
+            stack[sp++] = start
+            visited[start] = 1
+            var x0 = w; var y0 = h; var x1 = 0; var y1 = 0; var area = 0
+            while (sp > 0) {
+                val p = stack[--sp]
+                val x = p % w
+                val y = p / w
+                area++
+                if (x < x0) x0 = x
+                if (y < y0) y0 = y
+                if (x + 1 > x1) x1 = x + 1
+                if (y + 1 > y1) y1 = y + 1
+                var dy = -1
+                while (dy <= 1) {
+                    val ny = y + dy
+                    if (ny in 0 until h) {
+                        var dx = -1
+                        while (dx <= 1) {
+                            val nx = x + dx
+                            if (nx in 0 until w) {
+                                val np = ny * w + nx
+                                if (visited[np].toInt() == 0 && mask[np].toInt() != 0) {
+                                    visited[np] = 1
+                                    stack[sp++] = np
+                                }
+                            }
+                            dx++
+                        }
+                    }
+                    dy++
+                }
+            }
+            out += CComp(x0, y0, x1, y1, area)
+        }
+        return out
+    }
+
+    /** 二值腐蚀（k×k 矩形核，锚点居中；出界按前景处理，等价 OpenCV 默认边界值）。 */
+    private fun erodeRect(mask: ByteArray, w: Int, h: Int, k: Int): ByteArray {
+        val half = k / 2
+        val tmp = ByteArray(w * h)
+        val out = ByteArray(w * h)
+        // 水平 pass：窗口内前景计数
+        for (y in 0 until h) {
+            val row = y * w
+            var cnt = 0
+            for (x in 0..minOf(half, w - 1)) if (mask[row + x].toInt() != 0) cnt++
+            for (x in 0 until w) {
+                val lo = max(0, x - half)
+                val hi = min(w - 1, x + half)
+                tmp[row + x] = if (cnt == hi - lo + 1) 1 else 0
+                if (mask[row + lo].toInt() != 0) cnt--
+                if (hi + 1 < w && mask[row + hi + 1].toInt() != 0) cnt++
+            }
+        }
+        // 垂直 pass
+        for (x in 0 until w) {
+            var cnt = 0
+            for (y in 0..minOf(half, h - 1)) if (tmp[y * w + x].toInt() != 0) cnt++
+            for (y in 0 until h) {
+                val lo = max(0, y - half)
+                val hi = min(h - 1, y + half)
+                out[y * w + x] = if (cnt == hi - lo + 1) 1 else 0
+                if (tmp[lo * w + x].toInt() != 0) cnt--
+                if (hi + 1 < h && tmp[(hi + 1) * w + x].toInt() != 0) cnt++
+            }
+        }
+        return out
+    }
+
+    /** 二值膨胀（k×k 矩形核，锚点居中；出界按背景处理）。 */
+    private fun dilateRect(mask: ByteArray, w: Int, h: Int, k: Int): ByteArray {
+        val half = k / 2
+        val tmp = ByteArray(w * h)
+        val out = ByteArray(w * h)
+        for (y in 0 until h) {
+            val row = y * w
+            var cnt = 0
+            for (x in 0..minOf(half, w - 1)) if (mask[row + x].toInt() != 0) cnt++
+            for (x in 0 until w) {
+                val lo = max(0, x - half)
+                val hi = min(w - 1, x + half)
+                tmp[row + x] = if (cnt > 0) 1 else 0
+                if (mask[row + lo].toInt() != 0) cnt--
+                if (hi + 1 < w && mask[row + hi + 1].toInt() != 0) cnt++
+            }
+        }
+        for (x in 0 until w) {
+            var cnt = 0
+            for (y in 0..minOf(half, h - 1)) if (tmp[y * w + x].toInt() != 0) cnt++
+            for (y in 0 until h) {
+                val lo = max(0, y - half)
+                val hi = min(h - 1, y + half)
+                out[y * w + x] = if (cnt > 0) 1 else 0
+                if (tmp[lo * w + x].toInt() != 0) cnt--
+                if (hi + 1 < h && tmp[(hi + 1) * w + x].toInt() != 0) cnt++
+            }
+        }
+        return out
+    }
+
+    // ------------------------------------------------------------------
     // v2 退化管线（结构锚定失败时的兜底）
     // ------------------------------------------------------------------
 
@@ -896,35 +992,34 @@ object OccupancyParser {
     }
 
     private fun legacyParse(src: Bitmap): Grid {
-        val hsv = Mat()
-        Utils.bitmapToMat(src, hsv)
-        Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGBA2BGR)
-        Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_BGR2HSV)
-        val mask = Mat()
-        Core.inRange(hsv, Scalar(0.0, 30.0, 75.0), Scalar(255.0, 255.0, 255.0), mask)
-        hsv.release()
-        val k = max(3, min(src.width, src.height) / 200)
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, org.opencv.core.Size(k.toDouble(), k.toDouble()))
-        Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_OPEN, kernel)
-        kernel.release()
-
-        val labels = Mat()
-        val stats = Mat()
-        val centroids = Mat()
-        val n = Imgproc.connectedComponentsWithStats(mask, labels, stats, centroids)
-        val minArea = max(400.0, src.width * src.height * 0.0004)
-        val comps = mutableListOf<CompF>()
-        for (i in 1 until n) {
-            val x = stats.get(i, 0)[0].toFloat()
-            val y = stats.get(i, 1)[0].toFloat()
-            val w = stats.get(i, 2)[0].toFloat()
-            val h = stats.get(i, 3)[0].toFloat()
-            val area = stats.get(i, 4)[0].toFloat()
-            if (w * h < minArea || w < src.width * 0.03f || h < src.height * 0.012f) continue
-            if (w > src.width * 0.85f || h > src.height * 0.55f) continue
-            comps += CompF(x, y, x + w, y + h, area)
+        val W = src.width
+        val H = src.height
+        val pixels = IntArray(W * H)
+        src.getPixels(pixels, 0, W, 0, 0, W, H)
+        // 纯 Kotlin 等价 OpenCV RGBA→HSV + inRange(S≥30, V≥75)（H 全域不受限）
+        val mask = ByteArray(W * H)
+        for (i in 0 until W * H) {
+            val p = pixels[i]
+            val r = (p ushr 16) and 0xFF
+            val g = (p ushr 8) and 0xFF
+            val b = p and 0xFF
+            val mx = maxOf(r, g, b)
+            val mn = minOf(r, g, b)
+            val s = if (mx == 0) 0 else (mx - mn) * 255 / mx
+            mask[i] = if (s >= 30 && mx >= 75) 1 else 0
         }
-        mask.release(); labels.release(); stats.release(); centroids.release()
+        // 形态学开运算（k×k 矩形核）：先腐蚀后膨胀，去噪点保块状
+        val k = max(3, min(W, H) / 200)
+        val opened = dilateRect(erodeRect(mask, W, H, k), W, H, k)
+
+        val minArea = max(400.0, W.toDouble() * H * 0.0004)
+        val comps = mutableListOf<CompF>()
+        for (c in connectedComponents(opened, W, H)) {
+            if (c.w < W * 0.03 || c.h < H * 0.012) continue
+            if (c.w > W * 0.85 || c.h > H * 0.55) continue
+            if (c.w.toDouble() * c.h < minArea) continue
+            comps += CompF(c.x0.toFloat(), c.y0.toFloat(), c.x1.toFloat(), c.y1.toFloat(), c.area.toFloat())
+        }
         val deduped = comps.filter { c ->
             comps.none { o -> o !== c && o.x0 <= c.x0 && o.y0 <= c.y0 && o.x1 >= c.x1 && o.y1 >= c.y1 }
         }

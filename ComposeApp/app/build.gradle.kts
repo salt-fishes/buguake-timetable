@@ -30,7 +30,7 @@ android {
         versionCode = 13
         versionName = "2.2.1"
 
-        // 仅保留 arm64-v8a（真机为麒麟 arm64 芯片）
+        // 仅保留 arm64-v8a（已无原生库依赖，收窄以备将来）
         ndk {
             abiFilters += listOf("arm64-v8a")
         }    }
@@ -51,7 +51,7 @@ android {
         debug {
             // 与正式版共存（不覆盖用户数据），供 adb 驱动解析联调：run-as 可读私有日志
             applicationIdSuffix = ".debug"
-            // 模拟器联调：x86_64 镜像可安装运行（依赖库 opencv 自带 x86_64）
+            // 模拟器联调：x86_64 镜像可安装运行
             ndk {
                 abiFilters += listOf("x86_64")
             }
@@ -101,9 +101,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.activity:activity-compose:1.9.0")
-    // OpenCV：课表截图占用识别（色块检测，无 OCR）
-    implementation("com.quickbirdstudios:opencv:4.5.3.0")
-
     // 教务网页导入：适配器仓库同步（HTTP 下载）
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")

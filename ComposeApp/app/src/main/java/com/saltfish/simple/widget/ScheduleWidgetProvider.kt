@@ -54,6 +54,7 @@ open class ScheduleWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
+        for (id in appWidgetIds) logWidgetSize(appWidgetManager, id)
         val pending = goAsync()
         val appContext = context.applicationContext
         val layout = layoutRes
@@ -72,6 +73,29 @@ open class ScheduleWidgetProvider : AppWidgetProvider() {
                 pending.finish()
             }
         }
+    }
+
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: android.os.Bundle,
+    ) {
+        logWidgetSize(appWidgetManager, appWidgetId)
+        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+    }
+
+    /** 尺寸诊断：打印 launcher 分配的真实 dp 范围（判断格子长宽比/换算）。 */
+    private fun logWidgetSize(appWidgetManager: AppWidgetManager, id: Int) {
+        val o = appWidgetManager.getAppWidgetOptions(id)
+        val minW = o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+        val maxW = o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH)
+        val minH = o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
+        val maxH = o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
+        android.util.Log.i(
+            "WebImport",
+            "widget[$id] 尺寸dp: 竖屏=${minW}x$maxH 横屏=$maxW x$minH"
+        )
     }
 
     companion object {

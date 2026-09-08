@@ -59,8 +59,10 @@ import com.saltfish.simple.ui.theme.AppMotion
 /** 更新记录数据：新版本在前。 */
 private val CHANGELOG: List<Pair<String, List<String>>> = listOf(
     "0.1.0" to listOf(
-        "项目自简课表派生起步，裁剪离线导入，保留课表 / 小组件 / 提醒 / 日历同步 / 课表对比",
-        "教务网页导入能力开发中（基于拾光课程表开源适配生态）",
+        "自简课表派生：保留多课表 / 周视图 / 小组件 / 提醒 / 日历同步 / 课表对比",
+        "教务网页导入上线：学校列表、统一身份登录、一键导入（基于拾光开源适配生态）",
+        "支持自定义时间段课次与课程备注；课表对比识别改纯 Kotlin 实现",
+        "液态玻璃界面风格（卡顿可关闭）；全新应用图标",
     ),
 )
 
@@ -141,7 +143,7 @@ fun AboutPage(
             SectionTitle("主要功能")
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth()) {
-                    FeatureRow("教务网页导入", "选择学校登录教务，一键导入课程与排课（开发中）")
+                    FeatureRow("教务网页导入", "选择学校登录教务，一键导入课程、周次、地点与教师（覆盖 190+ 学校/教务系统）")
                     CardDivider()
                     FeatureRow("多课表管理", "班级课表 / 个人课表 / 同学的课表并存，随时切换")
                     CardDivider()
@@ -149,17 +151,19 @@ fun AboutPage(
                     CardDivider()
                     FeatureRow("今日页", "正在上课 / 下一节课 / 今日课程时间轴")
                     CardDivider()
+                    FeatureRow("课表对比", "截图识别占用，与同学/其他课表 App 找共同空闲")
+                    CardDivider()
                     FeatureRow("长按拖拽调课", "长按课程块即可跨天、跨节次移动")
                     CardDivider()
                     FeatureRow("系统日历同步", "课程直接写入系统日历，随系统提醒，可一键清空")
                     CardDivider()
                     FeatureRow("课表分享", "一键生成整周课表图片，调起系统分享")
                     CardDivider()
-                    FeatureRow("桌面小组件", "3×2 与 2×2 两种规格，可分别绑定课表")
+                    FeatureRow("桌面小组件", "2×2 / 2×3 / 2×4 三种规格，可分别绑定课表")
                     CardDivider()
                     FeatureRow("上课提醒", "课前 5/10/15/20 分钟本地通知，准点触发")
                     CardDivider()
-                    FeatureRow("个性化", "深色模式、动态取色、磨砂玻璃、自定义背景与作息时间")
+                    FeatureRow("个性化", "深色模式、动态取色、液态玻璃风格（卡顿可关闭）、自定义背景与作息时间")
                 }
             }
 
@@ -293,7 +297,7 @@ fun AboutPage(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "感谢以下开源项目：OpenCV、Jetpack Compose · Material 3、Room、Kotlin",
+                        "感谢拾光课程表适配生态（Apache-2.0）、Jetpack Compose · Material 3、Room、Kotlin",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -332,7 +336,7 @@ fun AboutPage(
                                     context.startActivity(
                                         Intent(
                                             Intent.ACTION_VIEW,
-                                            "https://github.com/salt-fishes/jiankebiao".toUri(),
+                                            "https://github.com/salt-fishes/buguake-timetable".toUri(),
                                         )
                                     )
                                 }
@@ -346,7 +350,7 @@ fun AboutPage(
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            "github.com/salt-fishes/jiankebiao",
+                            "github.com/salt-fishes/buguake-timetable",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary,

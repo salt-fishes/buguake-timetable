@@ -43,15 +43,10 @@ object WidgetTheme {
             else -> (context.resources.configuration.uiMode and
                 Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         }
+        // 小组件为 RemoteViews，无法实现液态玻璃；统一纯色背景
         return when {
-            settings.customBgEnabled && dark ->
-                Palette(R.drawable.widget_bg_glass_dark, D_PRIMARY, D_SECONDARY, D_ACCENT)
-            settings.customBgEnabled ->
-                Palette(R.drawable.widget_bg_glass_light, L_PRIMARY, L_SECONDARY, L_ACCENT)
-            dark ->
-                Palette(R.drawable.widget_bg_dark, D_PRIMARY, D_SECONDARY, D_ACCENT)
-            else ->
-                Palette(R.drawable.widget_bg, L_PRIMARY, L_SECONDARY, L_ACCENT)
+            dark -> Palette(R.drawable.widget_bg_dark, D_PRIMARY, D_SECONDARY, D_ACCENT)
+            else -> Palette(R.drawable.widget_bg, L_PRIMARY, L_SECONDARY, L_ACCENT)
         }
     }
 }

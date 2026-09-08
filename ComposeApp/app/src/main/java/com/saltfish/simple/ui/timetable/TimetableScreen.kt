@@ -14,6 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -1074,29 +1075,12 @@ private fun CourseBlock(
         // 磨砂玻璃模式：块体为玻璃面，顶部 4dp 课程色条做区分，文字用主题色保证可读；
         // 字号随块宽自适应（一行约 3 字，与实色模式一致）
         val cs = MaterialTheme.colorScheme
-        val isLightGlass = cs.surface.luminance() >= 0.5f
         BoxWithConstraints(
             modifier = modifier
                 .alpha(if (isDragging) 0.25f else if (dimmed) 0.38f else 1f)
                 .then(scaleModifier)
                 .then(dragModifier)
         ) {
-            // 亮色玻璃块与底色对比弱：块体下垫一层下移 2dp 的同形阴影盒，
-            // 阴影从底部露出（玻璃半透明，若直接给块体加 elevation 会透出来显脏）
-            if (isLightGlass) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .graphicsLayer { translationY = 2.dp.toPx() }
-                        .shadow(
-                            elevation = 6.dp,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
-                            clip = false,
-                            ambientColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.26f),
-                            spotColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.26f),
-                        )
-                )
-            }
             // 一行约 3 字：按去掉内边距后的可用宽度计算（CJK 全角 ≈ 字号）
             val nameSize = (((maxWidth.value - 8f) / 3f).coerceIn(8f, 14f))
             com.saltfish.simple.ui.theme.GlassSurface(
@@ -1143,22 +1127,22 @@ private fun CourseBlock(
         }
         return
     }
-    // 亮色模式下块与网格底色对比弱：2dp 轻阴影勾出边界（底部视觉权重更高）
-    val isLight = MaterialTheme.colorScheme.surface.luminance() >= 0.5f
     BoxWithConstraints(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .alpha(if (isDragging) 0.25f else if (dimmed) 0.38f else 1f)
             .then(scaleModifier)
             .then(dragModifier)
-            .then(
-                if (isLight) Modifier.shadow(
-                    elevation = 2.dp,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
-                    clip = false,
-                    ambientColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.30f),
-                    spotColor = container.copy(alpha = 0.55f),
-                ) else Modifier
+            .border(
+                width = 1.dp,
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(
+                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.42f),
+                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f),
+                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.20f),
+                    )
+                ),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
             )
             .background(container, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
             .clipToBounds()

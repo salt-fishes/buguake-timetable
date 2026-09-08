@@ -7,6 +7,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -168,7 +169,24 @@ fun SchoolSelectionScreen(
         map
     }
 
+    // 右滑（横向拖动累计超过阈值）返回上级
+    var backDragX by remember { mutableStateOf(0f) }
+    val swipeModifier = Modifier.pointerInput(Unit) {
+        detectHorizontalDragGestures(
+            onDragStart = { backDragX = 0f },
+            onDragEnd = {
+                if (backDragX > 260f) onBack()
+                backDragX = 0f
+            },
+            onDragCancel = { backDragX = 0f },
+        ) { change, dragAmount ->
+            change.consume()
+            backDragX += dragAmount
+        }
+    }
+
     Scaffold(
+        modifier = swipeModifier,
         snackbarHost = { SnackbarHost(snackbarHostState ?: remember { SnackbarHostState() }) },
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,

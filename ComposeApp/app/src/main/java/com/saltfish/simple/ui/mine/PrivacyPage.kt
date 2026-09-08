@@ -94,7 +94,7 @@ fun PrivacyPage(
                     CardDivider()
                     PermissionRow(
                         "通知",
-                        "显示课表导入的解析结果通知，以及课前上课提醒（Android 13 及以上需你授权）。",
+                        "仅用于课前上课提醒（Android 13 及以上需你授权），无营销或推广通知。",
                     )
                     CardDivider()
                     PermissionRow(
@@ -151,7 +151,7 @@ fun PrivacyPage(
             GlassCard(glass, Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(
-                        "课程数据保存在应用私有的本地数据库（Room）中；背景图片、解析临时文件保存在应用私有目录。" +
+                        "课程数据保存在应用私有的本地数据库（Room）中；背景图片与学校适配脚本缓存保存在应用私有目录。" +
                             "这些位置其他应用无法访问，卸载应用后全部随之删除。" +
                             "写入系统日历的课程事件保存在系统日历的「不挂科课表」日历中，可随时在应用内一键清空。",
                         style = MaterialTheme.typography.bodyMedium,

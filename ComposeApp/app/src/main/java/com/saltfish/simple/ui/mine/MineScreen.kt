@@ -232,7 +232,13 @@ fun MineScreen(
                     Modifier.padding(horizontal = 16.dp),
                 )
                 CardDivider()
-                SwitchRow("磨砂玻璃风格", settings.customBgEnabled, onSetCustomBgEnabled, Modifier.padding(horizontal = 16.dp))
+                SwitchRow(
+                    "液态玻璃风格",
+                    settings.customBgEnabled,
+                    onSetCustomBgEnabled,
+                    Modifier.padding(horizontal = 16.dp),
+                    supportingText = "实验性效果；如出现卡顿或耗电，可关闭此开关回退纯色界面",
+                )
                 AnimatedVisibility(
                     visible = settings.customBgEnabled,
                     enter = expandVertically(AppMotion.spatial()) + fadeIn(AppMotion.effects()),
@@ -559,13 +565,23 @@ private fun SwitchRow(
     checked: Boolean,
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    supportingText: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
     ) {
         val context = LocalContext.current
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (supportingText != null) {
+                Text(
+                    supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(checked = checked, onCheckedChange = {
             Haptics.tick(context)
             onChange(it)

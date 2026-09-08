@@ -5,13 +5,21 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,9 +31,72 @@ import com.saltfish.simple.webimport.SchoolData
 import com.saltfish.simple.webimport.SchoolIndexData
 import kotlinx.coroutines.launch
 
-/** 学校/工具集分类筛选（null = 全部）。 */
-private val CATEGORY_FILTERS = listOf(
-    null to "全部",
+/** 学位帽图标（Material school 图标几何，Apache 2.0；core 图标集不含，本地自绘）。 */
+private val SchoolCapIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "SchoolCap",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(
+            fill = SolidColor(Color.Black),
+            fillAlpha = 1f,
+        ) {
+            moveTo(12f, 3f)
+            lineTo(1f, 9f)
+            lineToRelative(4f, 2.18f)
+            verticalLineToRelative(6f)
+            lineTo(12f, 21f)
+            lineToRelative(7f, -3.82f)
+            verticalLineToRelative(-6f)
+            lineToRelative(2f, -1.09f)
+            lineTo(21f, 17f)
+            horizontalLineTo(23f)
+            lineTo(23f, 9f)
+            close()
+            moveTo(18.82f, 9f)
+            lineTo(12f, 12.72f)
+            lineTo(5.18f, 9f)
+            lineTo(12f, 5.28f)
+            close()
+            moveTo(17f, 15.99f)
+            lineToRelative(-5f, 2.73f)
+            lineToRelative(-5f, -2.73f)
+            verticalLineToRelative(-3.72f)
+            lineTo(12f, 15f)
+            lineToRelative(5f, -2.73f)
+            verticalLineToRelative(3.72f)
+            close()
+        }
+    }.build()
+}
+
+/** 最近访问持久化（SharedPreferences，最多 5 条，存学校 id）。 */
+private const val RECENT_PREFS = "webimport_prefs"
+private const val RECENT_KEY = "recent_schools"
+
+private fun loadRecentIds(ctx: android.content.Context): List<String> =
+    ctx.getSharedPreferences(RECENT_PREFS, android.content.Context.MODE_PRIVATE)
+        .getString(RECENT_KEY, "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+
+private fun touchRecentId(ctx: android.content.Context, id: String): List<String> {
+    val prefs = ctx.getSharedPreferences(RECENT_PREFS, android.content.Context.MODE_PRIVATE)
+    val next = (listOf(id) + loadRecentIds(ctx).filter { it != id }).take(5)
+    prefs.edit().putString(RECENT_KEY, next.joinToString(",")).apply()
+    return next
+}
+
+private fun removeRecentId(ctx: android.content.Context, id: String): List<String> {
+    val prefs = ctx.getSharedPreferences(RECENT_PREFS, android.content.Context.MODE_PRIVATE)
+    val next = loadRecentIds(ctx).filter { it != id }
+    prefs.edit().putString(RECENT_KEY, next.joinToString(",")).apply()
+    return next
+}
+
+/** 学校/工具集分类 Tab（对应拾光分类枚举；默认本科/专科）。 */
+private val CATEGORY_TABS = listOf(
     AdapterCategory.BACHELOR_AND_ASSOCIATE to "本科/专科",
     AdapterCategory.POSTGRADUATE to "研究生",
     AdapterCategory.GENERAL_TOOL to "通用工具",
@@ -33,7 +104,7 @@ private val CATEGORY_FILTERS = listOf(
 
 private data class SchoolRow(val letter: String?, val school: SchoolData?)
 
-/** 学校选择屏：搜索（名称/拼音首字母/代码）+ 分类筛选 + 首字母分组粘性头 + 字母导航条。 */
+/** 学校选择屏：胶囊搜索顶栏 + 分类 Tab + 最近访问 + 首字母分组 + 字母导航条。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SchoolSelectionScreen(
@@ -46,27 +117,37 @@ fun SchoolSelectionScreen(
     onBack: () -> Unit,
     glass: Boolean = false,
 ) {
-    var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf<AdapterCategory?>(null) }
-    val listState = rememberLazyListState()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
 
-    val filtered = remember(index, query, category) {
-        val q = query.trim().lowercase()
+    var query by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(AdapterCategory.BACHELOR_AND_ASSOCIATE) }
+    var recentIds by remember { mutableStateOf(loadRecentIds(context)) }
+
+    // 当前 Tab 的学校（搜索在 Tab 范围内进行，名称/拼音/代码三路匹配）
+    val tabSchools = remember(index, category) {
         index?.schools
-            ?.filter { s ->
-                val catOk = category == null || s.adapters.any { it.category == category }
-                val qOk = q.isBlank() ||
-                    s.name.lowercase().contains(q) ||
-                    s.initial.lowercase().contains(q) ||
-                    s.id.lowercase().contains(q)
-                catOk && qOk
-            }
+            ?.filter { s -> s.adapters.any { it.category == category } }
             ?.sortedWith(compareBy({ it.initial }, { it.name }))
             .orEmpty()
     }
+    val filtered = remember(tabSchools, query) {
+        val q = query.trim().lowercase()
+        if (q.isBlank()) tabSchools
+        else tabSchools.filter { s ->
+            s.name.lowercase().contains(q) ||
+                s.initial.lowercase().contains(q) ||
+                s.id.lowercase().contains(q)
+        }
+    }
+    val recentSchools = remember(recentIds, index) {
+        recentIds.mapNotNull { id -> index?.schools?.firstOrNull { it.id == id } }
+    }
+    // "最近访问"区块占用的 Lazy 列表项数（字母跳转偏移用）
+    val recentBlockCount = if (query.isBlank() && recentSchools.isNotEmpty()) 1 + recentSchools.size else 0
 
-    // 首字母分组（非 A-Z 归入 #），展开为 头/条目 交替行，并记录字母 → 列表索引
+    // 首字母分组（非 A-Z 归入 #），展开为 头/条目 交替行
     val rows = remember(filtered) {
         val grouped = filtered.groupBy { s ->
             s.initial.firstOrNull()?.uppercaseChar()?.toString()?.takeIf { it in "A".."Z" } ?: "#"
@@ -89,49 +170,56 @@ fun SchoolSelectionScreen(
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
-                title = { Text("选择学校") },
-                navigationIcon = {
+            // 胶囊搜索框即顶栏：返回箭头内嵌，右侧刷新/搜索图标
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
-                },
-                actions = {
+                    BasicTextFieldWithPlaceholder(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "选择学校",
+                        modifier = Modifier.weight(1f),
+                    )
                     IconButton(onClick = onRefresh, enabled = !loading) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "刷新索引")
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(Icons.Filled.Refresh, contentDescription = "刷新索引")
+                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
-                    else MaterialTheme.colorScheme.surface,
-                ),
-            )
+                    IconButton(onClick = { }) {
+                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    }
+                }
+            }
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("搜索学校名称 / 拼音首字母 / 代码") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // 分类 Tab
+            TabRow(
+                selectedTabIndex = CATEGORY_TABS.indexOfFirst { it.first == category },
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
             ) {
-                CATEGORY_FILTERS.forEach { (cat, label) ->
-                    FilterChip(
+                CATEGORY_TABS.forEach { (cat, label) ->
+                    Tab(
                         selected = category == cat,
                         onClick = { category = cat },
-                        label = { Text(label) },
+                        text = { Text(label) },
                     )
                 }
             }
+
             when {
                 loading && index == null -> Box(
                     Modifier.fillMaxSize(),
@@ -157,57 +245,45 @@ fun SchoolSelectionScreen(
                             state = listState,
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         ) {
-                            item {
-                                Text(
-                                    index?.let {
-                                        "共 ${it.schools.size} 个学校/工具集 · 索引 ${it.versionId}" +
-                                            if (it.protocolVersion != 2) " · ⚠ 协议 v${it.protocolVersion}" else ""
-                                    } ?: "",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 4.dp),
-                                )
+                            // 最近访问（无搜索时显示）
+                            if (query.isBlank() && recentSchools.isNotEmpty()) {
+                                item(key = "recent-header") {
+                                    Text(
+                                        "最近访问",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 6.dp),
+                                    )
+                                }
+                                items(recentSchools, key = { "recent-" + it.id }) { school ->
+                                    RecentSchoolCard(
+                                        school = school,
+                                        onClick = { onSelectSchool(school) },
+                                        onRemove = { recentIds = removeRecentId(context, school.id) },
+                                    )
+                                }
                             }
+                            // 字母分组列表
                             rows.forEach { row ->
                                 if (row.letter != null) {
-                                    stickyHeader(row.letter) {
-                                        Surface(
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Text(
-                                                row.letter,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                                            )
-                                        }
+                                    item(key = "letter-" + row.letter) {
+                                        Text(
+                                            row.letter,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                                        )
                                     }
                                 } else {
                                     row.school?.let { school ->
                                         item(key = school.id) {
-                                            ListItem(
-                                                headlineContent = { Text(school.name) },
-                                                supportingContent = {
-                                                    Text(
-                                                        "${school.id} · ${school.adapters.size} 个适配器",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                    )
+                                            SchoolCard(
+                                                school = school,
+                                                onClick = {
+                                                    recentIds = touchRecentId(context, school.id)
+                                                    onSelectSchool(school)
                                                 },
-                                                trailingContent = {
-                                                    Text(
-                                                        school.initial.take(4),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.primary,
-                                                    )
-                                                },
-                                                modifier = Modifier.clickable { onSelectSchool(school) },
-                                            )
-                                            HorizontalDivider(
-                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                                             )
                                         }
                                     }
@@ -216,7 +292,7 @@ fun SchoolSelectionScreen(
                             if (filtered.isEmpty() && index != null) {
                                 item {
                                     Text(
-                                        "没有匹配的学校",
+                                        if (query.isBlank()) "该分类下暂无学校" else "没有匹配的学校",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(top = 32.dp).fillMaxWidth(),
@@ -225,8 +301,8 @@ fun SchoolSelectionScreen(
                                 }
                             }
                         }
-                        // 右侧字母导航条：点击跳到对应首字母分组
-                        if (letterFirstIndex.isNotEmpty()) {
+                        // 右侧字母导航条：点击跳到对应首字母分组（含最近访问区块偏移）
+                        if (letterFirstIndex.isNotEmpty() && query.isBlank()) {
                             Column(
                                 Modifier
                                     .align(Alignment.CenterEnd)
@@ -237,13 +313,16 @@ fun SchoolSelectionScreen(
                                 letterFirstIndex.keys.forEach { letter ->
                                     Text(
                                         letter,
-                                        fontSize = 9.sp,
-                                        lineHeight = 11.sp,
+                                        fontSize = 10.sp,
+                                        lineHeight = 12.sp,
+                                        fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier
                                             .clickable {
                                                 letterFirstIndex[letter]?.let { i ->
-                                                    scope.launch { listState.scrollToItem(i) }
+                                                    scope.launch {
+                                                        listState.scrollToItem(i + recentBlockCount)
+                                                    }
                                                 }
                                             }
                                             .padding(horizontal = 4.dp),
@@ -256,6 +335,112 @@ fun SchoolSelectionScreen(
             }
         }
     }
+}
+
+/** 学校条目卡片：🎓 图标 + 校名（对齐拾光排版）。 */
+@Composable
+private fun SchoolCard(school: SchoolData, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                SchoolCapIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                school.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** 最近访问卡片：可移除。 */
+@Composable
+private fun RecentSchoolCard(school: SchoolData, onClick: () -> Unit, onRemove: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+    ) {
+        Row(
+            Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                SchoolCapIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                school.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onRemove) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "移除",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** 无边框占位文本输入（嵌在胶囊顶栏里）。 */
+@Composable
+private fun BasicTextFieldWithPlaceholder(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.foundation.text.BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+        ),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        decorationBox = { inner ->
+            if (value.isEmpty()) {
+                Text(
+                    placeholder,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            inner()
+        },
+        modifier = modifier,
+    )
 }
 
 /** 适配器选择屏：某学校/工具集下的适配器列表。 */

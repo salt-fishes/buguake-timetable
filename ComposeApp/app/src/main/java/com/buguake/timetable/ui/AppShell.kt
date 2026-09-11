@@ -147,6 +147,8 @@ private data class MoveReq(
     }
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    // 「长按应用图标 → 快速开锁」：切到校园页，由 CampusUnlockScreen 用默认门锁直接开门
+    val quickUnlockSeq by com.buguake.timetable.campus.QuickUnlock.seq.collectAsState()
     var selectedEntry by remember { mutableStateOf<EntryWithCourse?>(null) }
     var editingEntry by remember { mutableStateOf<EntryWithCourse?>(null) }
     var showAddCourse by rememberSaveable { mutableStateOf(false) }
@@ -164,6 +166,25 @@ private data class MoveReq(
     var pendingOccupancy by remember { mutableStateOf<OccupancyDetection?>(null) }
     // 网页导入预留：解析结果确认弹窗与入库流程（Phase 5/6 接线）
     var pendingImport by remember { mutableStateOf<ParsedSchedule?>(null) }
+
+    // 快捷方式直达开门：切到校园页，并收起压在上面的二级页——
+    // 否则会出现"门已经开了，屏幕还停在关于页"的错位观感
+    LaunchedEffect(quickUnlockSeq) {
+        if (quickUnlockSeq <= 0) return@LaunchedEffect
+        tab = 2
+        showAddCourse = false
+        showSectionTimes = false
+        showReminders = false
+        showAbout = false
+        showPrivacy = false
+        showTimetableManage = false
+        showWidgetBind = false
+        showCompare = false
+        showWebImport = false
+        selectedEntry = null
+        editingEntry = null
+    }
+
     val snackbarHostState = remember { SnackbarHostState() }
 
     val showSnackbar: (String) -> Unit = { msg ->
@@ -724,6 +745,7 @@ private data class MoveReq(
                 2 -> com.buguake.timetable.campus.ui.CampusScreen(
                     glass = glassOn,
                     showSnackbar = showSnackbar,
+                    openUnlockSeq = quickUnlockSeq,
                 )
                 else -> MineScreen(
                     settings = settings,
@@ -1062,7 +1084,6 @@ private data class MoveReq(
     OverlayPage(showAbout) {
             com.buguake.timetable.ui.mine.AboutPage(
                 versionName = com.buguake.timetable.BuildConfig.VERSION_NAME,
-            glass = glassOn,
             onBack = { showAbout = false },
         )
     }
@@ -1127,7 +1148,6 @@ private data class MoveReq(
 
     OverlayPage(showPrivacy) {
         com.buguake.timetable.ui.mine.PrivacyPage(
-            glass = glassOn,
             onBack = { showPrivacy = false },
         )
     }

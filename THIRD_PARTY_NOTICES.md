@@ -7,9 +7,9 @@
 
 - 上游项目：https://github.com/XingHeYuZhuan/shiguangschedule
 - 许可证：Apache License 2.0（Copyright 2025 XingHeYuZhuan）
-- 引用内容（规划中，Phase 5 落地后生效）：
+- 引用内容（已落地）：
   - 教务网页导入的 JS 桥协议设计（`WebBridgeProtocol.kt` / `WebBridgeHandler.kt`）
-  - 学校适配器索引 Protobuf 定义（`school_index.proto`）
+  - 学校适配器索引 Protobuf 定义（`school_index.proto`，见 `docs/school_index.proto`）
 - 本项目对上述引用内容有修改（适配本项目包名与数据模型），
   修改部分同样以 Apache License 2.0 释出。
 
@@ -237,7 +237,7 @@
   该项目的接口本身通过逆向"云莓智能"官方客户端获得，本项目沿用其接口行为，
   相关风险声明见隐私政策。
 
-## 3. 简课表（jiankebiao）
+## 4. 简课表（jiankebiao）
 
 本项目派生自同一作者的前作"简课表"（MIT License, Copyright (c) 2026 咸鱼），
 版权归属一致，无第三方署名义务，特此说明项目渊源。

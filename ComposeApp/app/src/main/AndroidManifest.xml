@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 宿舍开门可选门闸：开门前验证指纹/面容（API 28+ 平台 BiometricPrompt） -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- 教务网页导入：内嵌浏览器加载用户选择的教务网站与适配器仓库下载 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 校园页（云莓宿舍开门）：蓝牙扫描与连接；定位权限仅 Android 11 及以下的 BLE 扫描需要 -->
@@ -43,6 +45,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- 快捷方式 Intent 的解析目标：长按应用图标 → 快速开锁（宿舍门） -->
+            <intent-filter>
+                <action android:name="com.buguake.timetable.campus.UNLOCK" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- 今日课程桌面小组件（2×4 列表） -->

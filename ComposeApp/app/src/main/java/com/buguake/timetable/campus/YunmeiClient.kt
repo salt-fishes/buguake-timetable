@@ -92,11 +92,16 @@ class YunmeiClient(
                     mapOf("userName" to account, "userPwd" to pwdMd5),
                     emptyMap(),
                 )
-            }.getOrElse { throw YunmeiException("网络请求失败：${it.message}") }
+            }.getOrElse { e ->
+                // 网络类失败必须保持类型，调用方据此决定"保留凭据等待重试"而非清库
+                if (e is YunmeiException) throw e
+                throw YunmeiNetworkException("网络请求失败：${e.message ?: "未知错误"}")
+            }
             val loginRes = runCatching { org.json.JSONObject(loginBody) }
                 .getOrElse { throw YunmeiException("登录响应解析失败") }
             if (!loginRes.optBoolean("success", false)) {
-                throw YunmeiException(loginRes.optString("msg", "登录失败"))
+                // 账号密码错误 / 登录态失效：属于鉴权失败
+                throw YunmeiAuthException(loginRes.optString("msg", "登录失败"))
             }
             val o = loginRes.getJSONObject("o")
             client.session = YmSession(
@@ -122,6 +127,35 @@ class YunmeiClient(
                 }.getOrNull()
             }
             return client to schools
+        }
+
+        /**
+         * 用本机缓存恢复会话（不联网）：直接复用保存的 token / 学校 token，
+         * 供"进页面先用缓存开门、后台再静默同步"的离线优先流程使用。
+         * token 是否仍然有效由首次业务请求暴露（见 [YunmeiAuthException]）。
+         */
+        fun restore(
+            saved: CampusSaved,
+            post: suspend (url: String, form: Map<String, String>, headers: Map<String, String>) -> String,
+        ): YunmeiClient {
+            val client = YunmeiClient(post)
+            client.session = YmSession(
+                account = saved.account,
+                accountMd5 = md5(saved.account),
+                passwordMd5 = saved.passwordMd5,
+                userId = saved.userId,
+            ).also { it.token = saved.token }
+            if (saved.schoolNo.isNotBlank()) {
+                client.selectSchool(
+                    YmSchool(
+                        schoolNo = saved.schoolNo,
+                        name = saved.schoolName,
+                        serverUrl = saved.serverUrl,
+                        token = saved.schoolToken,
+                    )
+                )
+            }
+            return client
         }
     }
 
@@ -154,4 +188,16 @@ class YunmeiClient(
     }
 }
 
-class YunmeiException(message: String) : Exception(message)
+open class YunmeiException(message: String) : Exception(message)
+
+/**
+ * 鉴权失败（token 过期、账号密码错误、服务端 success=false）。
+ * 只有这一类失败才允许降级：先尝试用本机密码 MD5 静默重登，仍失败才回登录表单。
+ */
+class YunmeiAuthException(message: String) : YunmeiException(message)
+
+/**
+ * 网络不可达 / 超时。凭据与门锁缓存必须原样保留，只标记离线并给出重试入口——
+ * 旧版在这里一律 `store.clear()`，导致断一次网就要重新输密码。
+ */
+class YunmeiNetworkException(message: String) : YunmeiException(message)

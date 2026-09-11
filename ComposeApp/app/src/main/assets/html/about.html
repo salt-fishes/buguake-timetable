@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>关于</title>
+<style>
+  :root{
+    --fg:#1b1b1f; --dim:#5a5a63; --accent:#3f3f7a;
+    --bg:#fbfbfd; --panel:rgba(0,0,0,.04); --line:rgba(0,0,0,.10); --btn:rgba(63,63,122,.10);
+  }
+  html.dark{
+    --fg:#e7e7ec; --dim:#a6a6b2; --accent:#bcbcff;
+    --bg:#131317; --panel:rgba(255,255,255,.07); --line:rgba(255,255,255,.14); --btn:rgba(188,188,255,.14);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:18px 18px 44px;
+    font:15px/1.75 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--fg); background:var(--bg); -webkit-text-size-adjust:100%;
+  }
+  h1{ font-size:22px; margin:4px 0 2px }
+  h2{ font-size:16px; margin:24px 0 8px; color:var(--accent) }
+  p,li{ margin:6px 0 }
+  ul{ padding-left:20px; margin:6px 0 }
+  .dim{ color:var(--dim); font-size:13px }
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:12px 14px; margin:12px 0;
+  }
+  table{ width:100%; border-collapse:collapse; font-size:14px }
+  td{ padding:8px 0; border-bottom:1px solid var(--line); vertical-align:top }
+  td.k{ width:26%; color:var(--dim); padding-right:10px }
+  tr:last-child td{ border-bottom:none }
+  .ver{ color:var(--accent); font-weight:600 }
+  button{
+    font:inherit; color:var(--accent); font-weight:600;
+    background:var(--btn); border:1px solid var(--line);
+    border-radius:10px; padding:9px 16px; margin-top:6px;
+  }
+  b{ font-weight:600 }
+</style>
+</head>
+<body>
+<h1>不挂科课表</h1>
+<p class="dim">版本 <span class="ver" id="ver">-</span> · 选学校 · 登教务 · 一键导入课表</p>
+
+<h2>主要功能</h2>
+<div class="card">
+  <table>
+    <tr><td class="k">教务网页导入</td><td>选学校登录教务，一键导入课程、周次、地点与教师</td></tr>
+    <tr><td class="k">宿舍开门</td><td>登录一次后本机蓝牙开门；支持长按图标「快速开锁」，可选指纹/面容验证</td></tr>
+    <tr><td class="k">多课表与周视图</td><td>多套课表并存随时切换，左右滑动换周、今日高亮</td></tr>
+    <tr><td class="k">今日页</td><td>正在上课 / 下一节课 / 今日时间轴</td></tr>
+    <tr><td class="k">桌面小组件</td><td>2×2 / 2×3 / 2×4 三种规格，可分别绑定课表</td></tr>
+    <tr><td class="k">上课提醒</td><td>课前 5/10/15/20 分钟本地通知，准点触发</td></tr>
+    <tr><td class="k">系统日历同步</td><td>课程直接写入系统日历，可一键清空</td></tr>
+    <tr><td class="k">课表对比与调课</td><td>截图识别占用找共同空闲；长按拖拽跨天跨节次调课</td></tr>
+    <tr><td class="k">个性化</td><td>深色模式、动态取色、磨砂玻璃、自定义背景与作息</td></tr>
+  </table>
+</div>
+
+<h2>更新记录</h2>
+<div class="card">
+  <p><b>v1.1</b></p>
+  <ul>
+    <li>宿舍开门改为离线优先：登录一次后门锁密钥本地加密保存，日常开门不再联网、不再重复登录</li>
+    <li>新增可选「开门前验证指纹/面容」，验证通过后 60 秒内可连续开门</li>
+    <li>新增「长按应用图标 → 快速开锁」，用默认门锁直接开门；可选开门后自动退出</li>
+    <li>隐私政策与关于页改为 HTML 呈现并精简内容</li>
+  </ul>
+  <p><b>v1.0</b></p>
+  <ul>
+    <li>版本号正式升级为 1.0；宿舍开门支持记住真实 MAC 快速开锁</li>
+    <li>新增「数据详情」页：展示登录后获取的账号 / 学校 / 门锁数据，默认脱敏</li>
+    <li>底部导航「校园」换用学校图标；关于页新增手动「检查更新」</li>
+    <li>隐私政策与联网说明按实际行为重新校正</li>
+  </ul>
+  <p><b>v0.1.0</b></p>
+  <ul>
+    <li>教务网页导入上线（基于拾光开源适配生态）；校园页上线云莓宿舍蓝牙开门</li>
+    <li>多课表 / 周视图 / 小组件 / 提醒 / 日历同步 / 课表对比；液态玻璃界面风格</li>
+  </ul>
+</div>
+
+<h2>开源与致谢</h2>
+<p>教务导入能力来自<b>拾光课程表适配生态</b>（shiguangschedule · shiguang_warehouse）：适配脚本由社区共同维护，本应用只是执行者，感谢每一位提交过适配的贡献者。</p>
+<p class="dim">欢迎为学校适配出一份力——到拾光适配仓库提 Issue 或 PR，合并后本应用同步索引即可生效；也欢迎在本项目反馈问题或提 PR。其余参考：yunmei_unintelligent（MIT，门锁协议）、Jetpack Compose · Material 3、Room、Kotlin。</p>
+
+<h2>开发者</h2>
+<div class="card">
+  <table>
+    <tr><td class="k">开发者</td><td>咸鱼</td></tr>
+    <tr><td class="k">联系邮箱</td><td>xunguang255@163.com</td></tr>
+    <tr><td class="k">开源仓库</td><td>github.com/salt-fishes/buguake-timetable</td></tr>
+    <tr><td class="k">检查更新</td><td><button onclick="try{AndroidBridge.post('checkUpdate')}catch(e){}">检查更新</button></td></tr>
+  </table>
+</div>
+
+<h2>兼容性</h2>
+<p class="dim">支持 Android 8.0 及以上；背景模糊与动态取色需 Android 12 及以上（低版本自动降级）；指纹验证需 Android 9 及以上，Android 8 使用锁屏密码验证。</p>
+
+<script>
+  var p = new URLSearchParams(location.search);
+  if (p.get('dark') === '1') document.documentElement.classList.add('dark');
+  // 底色由应用侧传入（与顶栏同一个 surface 颜色），保证整页只有一层
+  var bg = p.get('bg');
+  if (bg) document.documentElement.style.setProperty('--bg', '#' + bg);
+  var v = p.get('v');
+  if (v) document.getElementById('ver').textContent = 'v' + v;
+</script>
+</body>
+</html>

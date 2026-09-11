@@ -20,14 +20,24 @@ import androidx.compose.ui.unit.dp
  * 新增功能只需在 [CAMPUS_FEATURES] 追加一条，首页与二级页导航自动生效。
  */
 @Composable
-fun CampusScreen(glass: Boolean = false, showSnackbar: (String) -> Unit) {
+fun CampusScreen(
+    glass: Boolean = false,
+    showSnackbar: (String) -> Unit,
+    /** 「长按应用图标 → 快速开锁」快捷方式序号（>0 时直接进入宿舍开门页并开门）。 */
+    openUnlockSeq: Int = 0,
+) {
     var activeId by rememberSaveable { mutableStateOf<String?>(null) }
     val feature = CAMPUS_FEATURES.firstOrNull { it.id == activeId }
 
     BackHandler(enabled = feature != null) { activeId = null }
 
+    // 快捷方式进入：直达宿舍开门页（页内会用默认门锁自动开门）
+    LaunchedEffect(openUnlockSeq) {
+        if (openUnlockSeq > 0) activeId = CAMPUS_FEATURES.first().id
+    }
+
     if (feature != null) {
-        feature.content(glass, showSnackbar) { activeId = null }
+        feature.content(glass, showSnackbar, openUnlockSeq) { activeId = null }
         return
     }
 

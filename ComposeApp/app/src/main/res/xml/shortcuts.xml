@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  静态快捷方式：长按桌面上的应用图标 → 「快速开锁」。
+  点击后以 action = com.buguake.timetable.campus.UNLOCK 启动 MainActivity，
+  由 QuickUnlock 总线驱动 CampusUnlockScreen 用默认门锁直接开门（无需进页面选锁）。
+
+  注：不写 android:targetPackage —— debug 构建的 applicationId 带 .debug 后缀，
+  写死包名会导致 debug 版快捷方式失效；不写包名时系统按应用自身包解析 targetClass。
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_unlock"
+        android:shortcutId="unlock"
+        android:shortcutLongLabel="@string/shortcut_unlock_long"
+        android:shortcutShortLabel="@string/shortcut_unlock_short">
+        <intent
+            android:action="com.buguake.timetable.campus.UNLOCK"
+            android:targetClass="com.buguake.timetable.MainActivity" />
+        <categories android:name="android.intent.category.LAUNCHER" />
+    </shortcut>
+</shortcuts>

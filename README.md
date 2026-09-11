@@ -35,7 +35,11 @@ cd ComposeApp
 
 要求 JDK 17 + Android SDK 35。推送 `v*` 标签（如 `v1.1`）会触发
 [Release workflow](.github/workflows/android-release.yml) 自动构建并上传签名 APK，
-需在仓库 Secrets 中配置 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。
+需在仓库 Secrets 中配置 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`
+（未配置时该 job 会跳过签名打包并给出提示，不会失败）。
+
+本地签名打包：在仓库根放 `keystore.properties`（`storeFile=keystore/buguake.jks`、`storePassword`、`keyAlias`、`keyPassword`）
+与 `keystore/buguake.jks`，两者均已被 `.gitignore` 排除、不会入库；随后 `./gradlew :app:assembleRelease` 即产出已签名 APK。
 
 目录速览：客户端在 `ComposeApp/`（`campus/` 宿舍开门、`webimport/` 教务导入、`ui/` 界面与主题）；
 `docs/` 放适配对比等文档；隐私政策在应用内「关于 → 隐私政策」以 HTML 呈现（`assets/html/`）。

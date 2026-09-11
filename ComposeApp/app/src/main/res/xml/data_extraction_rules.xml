@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 的备份 / 设备迁移规则（与 backup_rules.xml 保持一致）。
+  排除 campus_prefs.xml：云莓账号、密码摘要与门锁密钥不参与云备份与设备间迁移。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="campus_prefs.xml" />
+        <exclude domain="file" path="webimport" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="campus_prefs.xml" />
+        <exclude domain="file" path="webimport" />
+    </device-transfer>
+</data-extraction-rules>

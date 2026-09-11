@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.buguake.timetable.BuildConfig
 import com.buguake.timetable.data.ScheduleRepository
 import com.buguake.timetable.data.SettingsRepository
 import com.buguake.timetable.ui.timetable.TimetableInfo
@@ -318,8 +319,9 @@ fun ImportWebViewScreen(
                             displayZoomControls = false
                         }
                         applyDesktopMode(this, desktopMode)
-                        // debug 构建允许 chrome://inspect 远程调试
-                        WebView.setWebContentsDebuggingEnabled(true)
+                        // 仅 debug 构建允许 chrome://inspect 远程调试：
+                        // 正式包若放开，任何拿到设备的人都能查看教务会话页面内容
+                        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
                         addJavascriptInterface(
                             object {
                                 @JavascriptInterface
@@ -333,7 +335,8 @@ fun ImportWebViewScreen(
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                                 super.onPageStarted(view, url, favicon)
-                                android.util.Log.i("WebImport", "页面加载: $url")
+                                // 正式包不打印页面地址：教务 URL 常带会话参数
+                                if (BuildConfig.DEBUG) android.util.Log.i("WebImport", "页面加载: $url")
                                 urlInput = url
                                 // 新页面 = 新 JS 全局作用域，重复注入守卫复位
                                 injectedAtTable = null
@@ -362,12 +365,15 @@ fun ImportWebViewScreen(
                             }
 
                             // 脚本错误/日志捕获：适配器脚本的执行异常都在这里现形
+                            // （正式包不记录控制台内容：页面自行打印的信息可能含会话串）
                             override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage): Boolean {
-                                android.util.Log.i(
-                                    "WebImport",
-                                    "JS[${consoleMessage.messageLevel()}] ${consoleMessage.message()} " +
-                                        "(${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
-                                )
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.i(
+                                        "WebImport",
+                                        "JS[${consoleMessage.messageLevel()}] ${consoleMessage.message()} " +
+                                            "(${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
+                                    )
+                                }
                                 return true
                             }
                         })

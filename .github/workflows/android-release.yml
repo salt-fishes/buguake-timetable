@@ -24,7 +24,22 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # 签名材料只放在仓库 Secrets；未配置时跳过打包而不是让 workflow 失败
+      # （本地已用同一套 keystore 打过签名包，可手动上传到 Release）
+      - name: Check signing secrets
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::未配置签名 Secrets，跳过签名打包：请在仓库 Secrets 配置 KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD，或改为本地 ./gradlew assembleRelease 后手动上传 APK"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Restore signing keystore
+        if: steps.signing.outputs.configured == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -32,19 +47,21 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           mkdir -p keystore
-          echo "$KEYSTORE_BASE64" | base64 --decode > keystore/jiankebiao.jks
-          cat > keystore.properties <<EOF
-          storeFile=keystore/jiankebiao.jks
-          storePassword=$KEYSTORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
+          echo "$KEYSTORE_BASE64" | base64 --decode > keystore/buguake.jks
+          {
+            echo "storeFile=keystore/buguake.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
 
       - name: Build signed release
+        if: steps.signing.outputs.configured == 'true'
         working-directory: ComposeApp
         run: ./gradlew assembleRelease --console=plain --stacktrace
 
       - name: Upload release APK
+        if: steps.signing.outputs.configured == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: ComposeApp/app/build/outputs/apk/release/app-release.apk

@@ -67,7 +67,12 @@ class WebBridgeHandler(
 
     fun onMessageReceived(jsonString: String) {
         val message = JsBridgeMessage.parse(jsonString) ?: run {
-            android.util.Log.w(TAG, "桥消息解析失败: ${jsonString.take(200)}")
+            // 正式包不记录原始消息内容（可能含课表文本），只记失败事实
+            if (com.buguake.timetable.BuildConfig.DEBUG) {
+                android.util.Log.w(TAG, "桥消息解析失败: ${jsonString.take(200)}")
+            } else {
+                android.util.Log.w(TAG, "桥消息解析失败（内容已省略）")
+            }
             return
         }
         android.util.Log.i(TAG, "桥动作: ${message.action} callbackId=${message.callbackId}")

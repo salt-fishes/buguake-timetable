@@ -1,6 +1,8 @@
 package com.buguake.timetable.campus
 
 import android.content.Context
+import com.buguake.timetable.campus.exam.CampusExamBundle
+import com.buguake.timetable.campus.exam.CampusExamCodec
 
 /**
  * 云莓凭据与门锁参数的本地存储（离线开门的唯一数据源）。
@@ -8,7 +10,9 @@ import android.content.Context
  * - 凭据 + 门锁参数打包成一个 bundle，用 [LocalCrypto]（Keystore AES/GCM）加密后写入；
  * - 旧版本分散 key 的明文数据在读取时自动迁移（首次同步后即升级为加密 bundle）；
  * - 扫描学到的真实 MAC 仍按 `mac_<门锁名>` 单独存放：它与账号无关，退出登录不清除；
- * - 「开门后自动退出」「开门前验证」两个开关不含敏感信息，单独存放。
+ * - 「开门后自动退出」「开门前验证」两个开关不含敏感信息，单独存放；
+ * - 考试安排另存一份加密 bundle：与云莓凭据解耦（来源是教务系统而非云莓），
+ *   凭据退出不清空考试，清空考试也不影响开门。
  */
 class CampusStore private constructor(context: Context) {
 
@@ -71,6 +75,42 @@ class CampusStore private constructor(context: Context) {
     /** 已学到的真实 MAC；未学过返回空串。 */
     fun learnedMac(label: String): String = prefs.getString(K_MAC_PREFIX + label, "") ?: ""
 
+    // ---- 考试安排（校园本地化；来源是教务系统，与云莓凭据解耦）----
+
+    /** 读取考试缓存；无缓存/解密失败返回 null（调用方走"去教务系统读取"流程）。 */
+    fun loadExams(): CampusExamBundle? = prefs.getString(K_EXAMS, null)
+        ?.let { crypto.decrypt(it) }
+        ?.let { CampusExamCodec.decode(it) }
+
+    /** 覆盖写入考试缓存：每次抓取成功整体替换，教务系统是唯一事实源。 */
+    fun saveExams(bundle: CampusExamBundle) {
+        prefs.edit().putString(K_EXAMS, crypto.encrypt(CampusExamCodec.encode(bundle))).apply()
+    }
+
+    /** 清空考试缓存（用户手动清空；不影响云莓凭据与门锁）。 */
+    fun clearExams() {
+        prefs.edit().remove(K_EXAMS).apply()
+    }
+
+    /** 教务入口（校园考试安排）：学校/适配器名与教务网址。 */
+    var examEntryName: String
+        get() = prefs.getString(K_EXAM_ENTRY_NAME, "") ?: ""
+        set(value) { prefs.edit().putString(K_EXAM_ENTRY_NAME, value).apply() }
+
+    var examEntryUrl: String
+        get() = prefs.getString(K_EXAM_ENTRY_URL, "") ?: ""
+        set(value) { prefs.edit().putString(K_EXAM_ENTRY_URL, value).apply() }
+
+    /** 上次成功读取的页面地址：再次读取可直接回到该页（登录会话仍在）。 */
+    var examQueryUrl: String
+        get() = prefs.getString(K_EXAM_QUERY_URL, "") ?: ""
+        set(value) { prefs.edit().putString(K_EXAM_QUERY_URL, value).apply() }
+
+    /** 考试页视图：列表 / 周次。 */
+    var examViewMode: String
+        get() = prefs.getString(K_EXAM_VIEW, VIEW_LIST) ?: VIEW_LIST
+        set(value) { prefs.edit().putString(K_EXAM_VIEW, value).apply() }
+
     /**
      * 清空凭据与门锁缓存（「退出登录」/鉴权彻底失效）。
      * 保留：上次账号（预填）、两个开关、已学到的真实 MAC。
@@ -103,6 +143,15 @@ class CampusStore private constructor(context: Context) {
         private const val K_LAST_ACCOUNT = "last_account"
         private const val K_AUTO_EXIT = "auto_exit"
         private const val K_GATE = "gate_biometric"
+        private const val K_EXAMS = "campus_exams_v1"
+        private const val K_EXAM_ENTRY_NAME = "exam_entry_name"
+        private const val K_EXAM_ENTRY_URL = "exam_entry_url"
+        private const val K_EXAM_QUERY_URL = "exam_query_url"
+        private const val K_EXAM_VIEW = "exam_view"
+
+        /** [examViewMode] 取值。 */
+        const val VIEW_LIST = "list"
+        const val VIEW_WEEK = "week"
         private const val K_MAC_PREFIX = "mac_"
 
         // 旧版 key（迁移用，写入只写 bundle）

@@ -1,6 +1,8 @@
 package com.buguake.timetable.ui.mine
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -30,6 +32,11 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -74,6 +81,8 @@ fun MineScreen(
     onSetShowNonCurrentWeek: (Boolean) -> Unit,
     onSetShowTeacherOnBlock: (Boolean) -> Unit = {},
     onSetShowLocationOnBlock: (Boolean) -> Unit = {},
+    onSetShowExamsOnHome: (Boolean) -> Unit = {},
+    onSetMoveScope: (String) -> Unit = {},
     onSetDynamicColor: (Boolean) -> Unit,
     onSetDarkMode: (String) -> Unit,
     onOpenSectionTimes: () -> Unit,
@@ -97,24 +106,79 @@ fun MineScreen(
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showWeekDialog by rememberSaveable { mutableStateOf(false) }
     var showClearConfirm by rememberSaveable { mutableStateOf(false) }
+    var showMoveScopeDialog by rememberSaveable { mutableStateOf(false) }
+    // 二级设置页："" = 一级（常用），display = 显示与样式，calendar = 日历与导出，data = 数据管理
+    var detailPageState by rememberSaveable { mutableStateOf("") }
+    BackHandler(enabled = detailPageState.isNotEmpty()) { detailPageState = "" }
     val today = remember { LocalDate.now() }
     val context = LocalContext.current
 
-    Column(
-        modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        // ---- 页面标题：唯一的“大字”，层级起点 ----
-        Text(
-            "我的",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+    // 一级页滚动状态：放在 AnimatedContent 之外，进二级页前记住位置，返回时还原到设置入口处
+    val firstLevelScroll = rememberScrollState()
+    Column(modifier.fillMaxSize()) {
+        // 一级 ↔ 二级页整体转场：深度缩放 + 淡切（进入迎面放大、返回缩回，方向随层级变化）
+        androidx.compose.animation.AnimatedContent(
+            targetState = detailPageState,
+            transitionSpec = {
+                val deeper = targetState.isNotEmpty() && initialState.isEmpty()
+                if (deeper) {
+                    com.buguake.timetable.ui.theme.pageEnterCloser()
+                        .togetherWith(com.buguake.timetable.ui.theme.pageExitFurther())
+                } else {
+                    com.buguake.timetable.ui.theme.pageEnterFurther()
+                        .togetherWith(com.buguake.timetable.ui.theme.pageExitCloser())
+                }
+            },
+            label = "mineDetail",
+        ) { page ->
+        com.buguake.timetable.ui.theme.SwipeBackBox(
+            onBack = { detailPageState = "" },
+            enabled = page.isNotEmpty(),
+        ) {
+            // 阴影外层状态：内容统一按动画目标帧渲染，无需改动各处引用
+            val detailPage = page
+            // 每页独立滚动：二级页进入时在头部（位置 0），一级页共用 firstLevelScroll 记住位置
+            val pageScroll = if (page.isEmpty()) firstLevelScroll else rememberScrollState()
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(pageScroll)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 104.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+        // ---- 页面标题：一级「我的」；二级页带返回 ----
+        val pageTitle = when (detailPage) {
+            "display" -> "显示与样式"
+            "calendar" -> "日历与导出"
+            "data" -> "数据管理"
+            else -> ""
+        }
+        if (pageTitle.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                IconButton(onClick = { Haptics.tick(context); detailPageState = "" }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+                Text(
+                    pageTitle,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        } else {
+            Text(
+                "我的",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        // ---- 以下为一级页内容：学期 / 常用 / 更多设置（二级页隐藏） ----
+        if (detailPage.isEmpty()) {
 
         // ---- 学期信息：全页视觉重心，最常查看/修改的两项 ----
         GlassCard(glass, Modifier.fillMaxWidth()) {
@@ -182,11 +246,10 @@ fun MineScreen(
             }
         }
 
-        // ---- 课表：导入 / 作息 / 管理与小组件 / 日历同步 ----
-        SectionHeader("课表")
+        // ---- 常用：最高频的四个入口 ----
+        SectionHeader("常用")
         GlassCard(glass, Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                // 教务网页导入（Phase 5 接入 WebView 导入流程前先占位）
                 Button(
                     onClick = onImport,
                     modifier = Modifier
@@ -198,30 +261,52 @@ fun MineScreen(
                 CardDivider()
                 ActionRow(
                     "作息时间",
-                    "共 ${settings.sectionTimes.size} 节 · 点击进入编辑",
+                    "统一设置 / 作息预设 / 逐节微调",
                     trailing = "${fmt(settings.sectionTimes.first().start.hour, settings.sectionTimes.first().start.minute)}" +
                         " - ${fmt(settings.sectionTimes.last().end.hour, settings.sectionTimes.last().end.minute)}",
-                ) { onOpenSectionTimes() }
-                CardDivider()
-                ActionRow("课表管理", "多课表切换 / 重命名 / 复制") { onOpenTimetableManage() }
-                CardDivider()
-                ActionRow("桌面小组件", "2×2 / 2×3 / 2×4 三种尺寸，分别绑定课表") { onOpenWidgetBind() }
-                CardDivider()
-                ActionRow("课表对比（实验性）", "勾选多张课表，找共同空闲时间") { onOpenCompare() }
+                ) { Haptics.tick(context); onOpenSectionTimes() }
                 CardDivider()
                 ActionRow(
-                    "同步到系统日历",
-                    "写入系统日历「不挂科课表」，随系统日历提醒",
-                    enabled = entryCount > 0,
-                ) { onSyncCalendar() }
+                    "课程提醒",
+                    if (settings.remindEnabled) {
+                        val ahead = if (settings.remindMinutesBefore == 0) "准点提醒"
+                        else "提前 ${settings.remindMinutesBefore} 分钟"
+                        "已开启 · $ahead · 点击查看权限与诊断"
+                    } else {
+                        "已关闭 · 点击进入设置"
+                    },
+                ) { Haptics.tick(context); onOpenReminders() }
                 CardDivider()
-                ActionRow("清空系统日历中的课程", "撤销同步，仅删除本应用写入的课程") { onClearCalendar() }
-                CardDivider()
-                ActionRow("导出 .ics 文件", "备用：供其他日历应用手动导入", enabled = entryCount > 0) { onExportIcs() }
+                ActionRow("桌面小组件", "2×2 / 3×2 / 4×2（今明双栏）三种尺寸，分别绑定课表") { Haptics.tick(context); onOpenWidgetBind() }
             }
         }
 
-        // ---- 显示：可见性开关 + 磨砂玻璃背景 ----
+        // ---- 更多设置：低频项，各归各的二级页 ----
+        SectionHeader("更多设置")
+        GlassCard(glass, Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                ActionRow("课表管理", "多课表切换 / 重命名 / 复制") { Haptics.tick(context); onOpenTimetableManage() }
+                CardDivider()
+                ActionRow("课表对比（实验性）", "勾选多张课表，找共同空闲时间") { Haptics.tick(context); onOpenCompare() }
+                CardDivider()
+                ActionRow("显示与样式", "显示开关 · 长按范围 · 磨砂玻璃背景 · 深色模式") { Haptics.tick(context); detailPageState = "display" }
+                CardDivider()
+                ActionRow("日历与导出", "同步系统日历 · 清空 · 导出 .ics") { Haptics.tick(context); detailPageState = "calendar" }
+                CardDivider()
+                ActionRow("数据管理", "课程统计 · 清除当前课表") { Haptics.tick(context); detailPageState = "data" }
+                CardDivider()
+                ActionRow(
+                    "关于不挂科课表",
+                    trailing = "版本 ${com.buguake.timetable.BuildConfig.VERSION_NAME}",
+                ) { onOpenAbout() }
+                CardDivider()
+                ActionRow("隐私政策", trailing = "无广告") { onOpenPrivacy() }
+            }
+        }
+        }  // if (detailPage.isEmpty()) 一级页：学期 / 常用 / 更多设置
+
+        // ---- 二级：显示与样式 ----
+        if (detailPage == "display") {
         SectionHeader("显示")
         GlassCard(glass, Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -247,6 +332,23 @@ fun MineScreen(
                     onSetShowLocationOnBlock,
                     Modifier.padding(horizontal = 16.dp),
                 )
+                CardDivider()
+                SwitchRow(
+                    "首页显示考试",
+                    settings.showExamsOnHome,
+                    onSetShowExamsOnHome,
+                    Modifier.padding(horizontal = 16.dp),
+                )
+                CardDivider()
+                ActionRow(
+                    "长按移动课程范围",
+                    subtitle = "拖动课程块调整时间时的作用范围",
+                    trailing = when (settings.moveScope) {
+                        com.buguake.timetable.data.SettingsRepository.MOVE_SCOPE_THIS_WEEK -> "仅本周"
+                        com.buguake.timetable.data.SettingsRepository.MOVE_SCOPE_REST -> "以后每周"
+                        else -> "每次询问"
+                    },
+                ) { showMoveScopeDialog = true }
                 CardDivider()
                 SwitchRow("磨砂玻璃风格", settings.customBgEnabled, onSetCustomBgEnabled, Modifier.padding(horizontal = 16.dp))
                 AnimatedVisibility(
@@ -308,11 +410,13 @@ fun MineScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                }
             }
         }
+        }  // GlassCard
+        }  // if (detailPage == "display")
 
-        // ---- 外观：主题色相关 ----
+        // ---- 外观：主题色相关（仅二级页） ----
+        if (detailPage == "display") {
         SectionHeader("外观")
         GlassCard(glass, Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -357,25 +461,28 @@ fun MineScreen(
                 )
             }
         }
+        }  // if (detailPage == "display")：外观在二级页
 
-        // ---- 提醒：独立页面（权限引导 / 提前量 / 运行诊断 / 测试） ----
-        SectionHeader("提醒")
+        // ---- 二级：日历与导出 ----
+        if (detailPage == "calendar") {
+        SectionHeader("系统日历")
         GlassCard(glass, Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 ActionRow(
-                    "课程提醒",
-                    if (settings.remindEnabled) {
-                        val ahead = if (settings.remindMinutesBefore == 0) "准点提醒"
-                        else "提前 ${settings.remindMinutesBefore} 分钟"
-                        "已开启 · $ahead · 点击查看权限与诊断"
-                    } else {
-                        "已关闭 · 点击进入设置"
-                    },
-                ) { onOpenReminders() }
+                    "同步到系统日历",
+                    "写入系统日历「不挂科课表」，随系统日历提醒",
+                    enabled = entryCount > 0,
+                ) { onSyncCalendar() }
+                CardDivider()
+                ActionRow("清空系统日历中的课程", "撤销同步，仅删除本应用写入的课程") { onClearCalendar() }
+                CardDivider()
+                ActionRow("导出 .ics 文件", "备用：供其他日历应用手动导入", enabled = entryCount > 0) { onExportIcs() }
             }
         }
+        }
 
-        // ---- 数据：统计与危险操作 ----
+        // ---- 二级：数据管理 ----
+        if (detailPage == "data") {
         SectionHeader("数据")
         GlassCard(glass, Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth()) {
@@ -391,19 +498,10 @@ fun MineScreen(
                 }
             }
         }
-
-        // ---- 关于 ----
-        SectionHeader("关于")
-        GlassCard(glass, Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth()) {
-                ActionRow(
-                    "关于不挂科课表",
-                    trailing = "版本 ${com.buguake.timetable.BuildConfig.VERSION_NAME}",
-                ) { onOpenAbout() }
-                CardDivider()
-                ActionRow("隐私政策", trailing = "无广告") { onOpenPrivacy() }
-            }
         }
+        }  // SwipeBackBox
+            }  // AnimatedContent 内层 Column
+        }  // AnimatedContent
     }
 
     if (showDatePicker) {
@@ -428,6 +526,57 @@ fun MineScreen(
         ) {
             DatePicker(state = dateState)
         }
+    }
+
+    // 长按移动课程的作用范围：选好后调课不再每次弹窗询问
+    if (showMoveScopeDialog) {
+        val options = listOf(
+            com.buguake.timetable.data.SettingsRepository.MOVE_SCOPE_ASK to "每次询问",
+            com.buguake.timetable.data.SettingsRepository.MOVE_SCOPE_THIS_WEEK to "仅本周",
+            com.buguake.timetable.data.SettingsRepository.MOVE_SCOPE_REST to "以后每周",
+        )
+        AlertDialog(
+            onDismissRequest = { showMoveScopeDialog = false },
+            title = { Text("长按移动课程范围") },
+            text = {
+                Column {
+                    options.forEach { (value, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSetMoveScope(value)
+                                    showMoveScopeDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                        ) {
+                            RadioButton(
+                                selected = settings.moveScope == value,
+                                onClick = {
+                                    onSetMoveScope(value)
+                                    showMoveScopeDialog = false
+                                },
+                            )
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        "选「仅本周/以后每周」后，拖动课程块将直接按该范围调整，不再询问。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMoveScopeDialog = false }) { Text("关闭") }
+            },
+        )
     }
 
     if (showClearConfirm) {

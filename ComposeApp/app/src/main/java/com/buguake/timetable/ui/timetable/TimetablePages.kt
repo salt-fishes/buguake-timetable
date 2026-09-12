@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +42,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import com.buguake.timetable.ui.theme.AppMotion
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -126,7 +129,11 @@ private fun WeeksRow(weeks: Int, onChange: (Int) -> Unit) {
     ) {
         Text("总周数", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         IconButton(onClick = { onChange((weeks - 1).coerceIn(8, 30)) }) { Text("−") }
-        Text("$weeks", style = MaterialTheme.typography.bodyLarge)
+        com.buguake.timetable.ui.theme.RollingNumber(
+            value = weeks,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+        )
         IconButton(onClick = { onChange((weeks + 1).coerceIn(8, 30)) }) { Text("+") }
     }
 }
@@ -267,7 +274,20 @@ fun ImportChooseDialog(
                     }
                     Spacer(Modifier.padding(top = 12.dp))
                 }
-                if (presetTarget != null || newMode) {
+                // 新建/覆盖两种模式切换：滑动+淡入过渡，不再硬切
+                androidx.compose.animation.AnimatedContent(
+                    targetState = presetTarget != null || newMode,
+                    transitionSpec = {
+                        (androidx.compose.animation.fadeIn(AppMotion.effects()) +
+                            androidx.compose.animation.slideInVertically(AppMotion.spatialFast()) { it / 12 })
+                            .togetherWith(
+                                androidx.compose.animation.fadeOut(AppMotion.effectsFast()) +
+                                    androidx.compose.animation.slideOutVertically(AppMotion.spatialFast()) { it / 12 }
+                            )
+                    },
+                    label = "importMode",
+                ) { nameMode ->
+                    if (nameMode) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -313,6 +333,7 @@ fun ImportChooseDialog(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+                }
                 }
             }
         },
@@ -386,7 +407,7 @@ fun TimetableManagePage(
                 .padding(padding)
                 .fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = 16.dp, vertical = 8.dp,
+                start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp,
             ),
         ) {
             items(timetables, key = { it.timetable.id }) { info ->
@@ -394,6 +415,7 @@ fun TimetableManagePage(
                 val active = t.id == activeId
                 Row(
                     Modifier
+                        .animateItem()
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .clickable { if (!active) onSwitch(t) }
@@ -409,12 +431,18 @@ fun TimetableManagePage(
                                 color = if (active) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurface,
                             )
-                            if (active) {
+                            // 「使用中」徽章弹性弹入
+                            val badgeScale = com.buguake.timetable.ui.theme.rememberPopScale(active)
+                            if (active && badgeScale > 0.01f) {
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     "使用中",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = badgeScale
+                                        scaleY = badgeScale
+                                    },
                                 )
                             }
                         }
@@ -535,6 +563,7 @@ fun WidgetBindPage(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
+                .padding(bottom = 104.dp)
         ) {
             Text(
                 "为桌面上的每个小组件选择展示的课表；未设置的跟随当前课表。",

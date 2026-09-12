@@ -106,7 +106,7 @@ fun ReminderPage(
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp),
+            .padding(bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // ---- 页头 ----
@@ -150,9 +150,21 @@ fun ReminderPage(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = settings.remindEnabled, onCheckedChange = onSetRemindEnabled)
+                val reminderContext = androidx.compose.ui.platform.LocalContext.current
+                Switch(
+                checked = settings.remindEnabled,
+                onCheckedChange = { com.buguake.timetable.ui.theme.Haptics.tick(reminderContext); onSetRemindEnabled(it) },
+            )
             }
-            if (settings.remindEnabled) {
+            // 开关打开后「提前多久」选择行平滑展开
+            androidx.compose.animation.AnimatedVisibility(
+                visible = settings.remindEnabled,
+                enter = androidx.compose.animation.expandVertically(com.buguake.timetable.ui.theme.AppMotion.spatial()) +
+                    androidx.compose.animation.fadeIn(com.buguake.timetable.ui.theme.AppMotion.effects()),
+                exit = androidx.compose.animation.shrinkVertically(com.buguake.timetable.ui.theme.AppMotion.spatialFast()) +
+                    androidx.compose.animation.fadeOut(com.buguake.timetable.ui.theme.AppMotion.effectsFast()),
+            ) {
+            Column {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "提前多久",
@@ -179,6 +191,7 @@ fun ReminderPage(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
             }
         }
 

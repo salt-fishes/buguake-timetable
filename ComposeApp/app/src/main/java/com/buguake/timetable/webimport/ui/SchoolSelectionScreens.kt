@@ -7,7 +7,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -120,6 +119,8 @@ fun SchoolSelectionScreen(
     onRefresh: () -> Unit,
     onBack: () -> Unit,
     glass: Boolean = false,
+    /** 顶部提示条（校园考试入口用来声明"仅兼容正方教务"）。 */
+    banner: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -169,24 +170,10 @@ fun SchoolSelectionScreen(
         map
     }
 
-    // 右滑（横向拖动累计超过阈值）返回上级
-    var backDragX by remember { mutableStateOf(0f) }
-    val swipeModifier = Modifier.pointerInput(Unit) {
-        detectHorizontalDragGestures(
-            onDragStart = { backDragX = 0f },
-            onDragEnd = {
-                if (backDragX > 260f) onBack()
-                backDragX = 0f
-            },
-            onDragCancel = { backDragX = 0f },
-        ) { change, dragAmount ->
-            change.consume()
-            backDragX += dragAmount
-        }
-    }
-
+    // 右滑返回交给外层统一的 SwipeBackBox（边缘跟手位移 + 1/3 页宽阈值）：
+    // 此处不再自带全屏横向拖动检测——它会先消费掉所有横向手势，
+    // 外层侧滑永远收不到事件，且隐形阈值拖动没有视觉反馈
     Scaffold(
-        modifier = swipeModifier,
         snackbarHost = { SnackbarHost(snackbarHostState ?: remember { SnackbarHostState() }) },
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,
@@ -211,13 +198,19 @@ fun SchoolSelectionScreen(
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = onRefresh, enabled = !loading) {
-                        if (loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(Icons.Filled.Refresh, contentDescription = "刷新索引")
+                        androidx.compose.animation.Crossfade(
+                            targetState = loading,
+                            animationSpec = com.buguake.timetable.ui.theme.AppMotion.effectsFast(),
+                            label = "refreshBusy",
+                        ) { busy ->
+                            if (busy) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Icon(Icons.Filled.Refresh, contentDescription = "刷新索引")
+                            }
                         }
                     }
                     IconButton(onClick = { }) {
@@ -238,6 +231,23 @@ fun SchoolSelectionScreen(
                         selected = category == cat,
                         onClick = { category = cat },
                         text = { Text(label) },
+                    )
+                }
+            }
+
+            if (banner != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        banner,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
             }
@@ -265,7 +275,7 @@ fun SchoolSelectionScreen(
                         LazyColumn(
                             Modifier.fillMaxSize().padding(end = 26.dp),
                             state = listState,
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
                         ) {
                             // 最近访问（无搜索时显示）
                             if (query.isBlank() && recentSchools.isNotEmpty()) {
@@ -333,6 +343,12 @@ fun SchoolSelectionScreen(
                                     scope.launch { listState.scrollToItem(i + recentBlockCount) }
                                 }
                             }
+                            fun jumpToAnimated(idx: Int) {
+                                if (idx !in letters.indices) return
+                                letterFirstIndex[letters[idx]]?.let { i ->
+                                    scope.launch { listState.animateScrollToItem(i + recentBlockCount) }
+                                }
+                            }
                             Column(
                                 Modifier
                                     .align(Alignment.CenterEnd)
@@ -364,7 +380,7 @@ fun SchoolSelectionScreen(
                                             .clickable {
                                                 letterFirstIndex[letter]?.let { i ->
                                                     scope.launch {
-                                                        listState.scrollToItem(i + recentBlockCount)
+                                                        listState.animateScrollToItem(i + recentBlockCount)
                                                     }
                                                 }
                                             }
@@ -517,7 +533,7 @@ fun AdapterSelectionScreen(
     ) { padding ->
         LazyColumn(
             Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(school.adapters, key = { it.adapterId }) { adapter ->

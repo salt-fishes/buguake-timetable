@@ -6,12 +6,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.buguake.timetable.campus.QuickUnlock
 import com.buguake.timetable.ui.AppRoot
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 冷启动 SplashScreen：系统级启动动画，退出时自然过渡到界面
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         // 边到边绘制：背景图延伸至状态栏/导航条下方，内容用 insets 避让
         enableEdgeToEdge()

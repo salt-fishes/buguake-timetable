@@ -6,7 +6,7 @@
 ## 一、结论
 
 应用**不收集、不上传、不共享**任何个人信息：无账号体系、无服务端、无广告 SDK、无统计埋点、无崩溃上报。
-所有用户数据（课表、背景图、云莓凭据、门锁密钥）均只存在于设备本地，卸载即删除。
+所有用户数据（课表、背景图、云莓凭据、门锁密钥、考试安排缓存）均只存在于设备本地，卸载即删除。
 本次自查修复 4 处问题（见第四节），另有 2 项残余风险与建议记录在第五节。
 
 ## 二、权限逐项核对（release 合并清单）
@@ -18,7 +18,7 @@
 | USE_BIOMETRIC | 是 | 可选「开门前验证」，仅用户开启后使用 | ✅ |
 | BLUETOOTH_SCAN / CONNECT | 是 | 仅点击「开门」时扫描/连接门锁（`neverForLocation`） | ✅ |
 | BLUETOOTH / BLUETOOTH_ADMIN / ACCESS_FINE_LOCATION | 是（maxSdkVersion=30） | Android 11 及以下 BLE 扫描的旧机制要求 | ✅ |
-| READ_CALENDAR / WRITE_CALENDAR | 是 | 写入并清理系统日历「不挂科课表」（`CalendarSync` 需按名查询日历） | ✅ |
+| READ_CALENDAR / WRITE_CALENDAR | 是 | 写入并清理系统日历「不挂科课表」与「不挂科考试」（`CalendarSync` 需按名查询日历） | ✅ |
 | VIBRATE | 是 | 操作触感反馈 | ✅ |
 | RECEIVE_BOOT_COMPLETED | 是 | 重启后重排课前提醒（`BootReceiver`） | ✅ |
 | SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM | 是 | 课前提醒准点触发（核心功能） | ✅ |
@@ -31,6 +31,7 @@
 - 出网域名固定且可枚举：`cdn.jsdelivr.net`、`raw.githubusercontent.com`（适配脚本与索引）、
   `api.github.com`（手动检查更新）、`base.yunmeitech.com` 及各校 `serverUrl`（宿舍开门）。
 - 教务系统交互只发生在内嵌 WebView 中，凭据仅存在于该会话；App 不读取、不落盘（提供「清除登录」）。
+- 校园「考试安排」在同一个 WebView 会话内读取本人考试数据，结果经 Keystore AES-256/GCM 加密后仅存本机（可一键清空、不参与备份）。
 - 云莓凭据与门锁密钥经 Android Keystore AES-256/GCM 加密后存于应用私有 `SharedPreferences`。
 
 ## 四、本次修复
@@ -68,5 +69,15 @@
 
 ## 七、与政策文档的一致性
 
-本记录对应的用户可见说明：应用内「关于 → 隐私政策」（`assets/html/privacy.html`）、仓库根 `PRIVACY_POLICY.md`（v1.1）。
+本记录对应的用户可见说明：应用内「关于 → 隐私政策」（`assets/html/privacy.html`）、仓库根 `PRIVACY_POLICY.md`（v1.2）。
 权限清单、联网行为、数据存储与删除、免责声明四处口径一致。
+
+## 八、v1.2 增量自查（校园考试安排）
+
+- **新增本地数据**：考试安排缓存（课程、时间、考场、座位、方式、学期）。与云莓凭据同处 `campus_prefs.xml`，
+  经 Keystore AES-256/GCM 加密；该文件已被备份规则排除，因此**不参与云备份与换机迁移**。应用内提供「清空考试缓存」。
+- **新增联网行为**：在内嵌 WebView 里向本人教务系统发起考试查询（正方 V9 的 `kscx_cxXsksxxIndex`）。
+  与课程导入共用同一个 WebView 外壳、同一套 Cookie 会话与「清除登录」；登录凭据不落盘。
+- **权限**：未新增任何权限。日历权限复用，考试写入独立日历「不挂科考试」，与课表同步/清空互不影响。
+- **能力边界**：抓取脚本是**校园本地化**自带实现（未进入拾光适配器生态，也未新增桥协议动作），
+  目前仅在中国计量大学实测通过；其数据开关完全独立于云莓凭据与宿舍开门。

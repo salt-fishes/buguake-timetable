@@ -1,6 +1,7 @@
 package com.buguake.timetable.webimport.ui
 
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.animation.togetherWith
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,6 +21,13 @@ private sealed interface Step {
     data object School : Step
     data class Adapter(val school: SchoolData) : Step
     data class Browser(val school: SchoolData, val adapter: AdapterData, val jsContent: String) : Step
+}
+
+/** 步骤深度：学校 0 → 适配器 1 → 浏览器 2，用于转场的进/退方向判定。 */
+private fun Step.depth(): Int = when (this) {
+    Step.School -> 0
+    is Step.Adapter -> 1
+    is Step.Browser -> 2
 }
 
 /**
@@ -52,8 +60,32 @@ fun WebImportFlow(
         loading = false
     }
 
-    when (val s = step) {
-        Step.School -> SchoolSelectionScreen(
+    // 选学校 → 选适配器 → 浏览器导入：深度缩放 + 淡切转场（方向随步骤深度变化）
+    androidx.compose.animation.AnimatedContent(
+        targetState = step,
+        transitionSpec = {
+            if (targetState.depth() > initialState.depth()) {
+                com.buguake.timetable.ui.theme.pageEnterCloser()
+                    .togetherWith(com.buguake.timetable.ui.theme.pageExitFurther())
+            } else {
+                com.buguake.timetable.ui.theme.pageEnterFurther()
+                    .togetherWith(com.buguake.timetable.ui.theme.pageExitCloser())
+            }
+        },
+        label = "webImportStep",
+    ) { s ->
+        com.buguake.timetable.ui.theme.SwipeBackBox(
+            onBack = {
+                when (s) {
+                    is Step.Adapter -> step = Step.School
+                    is Step.Browser -> step = Step.Adapter(s.school)
+                    Step.School -> onClose()
+                }
+            },
+            enabled = true,
+        ) {
+        when (s) {
+            Step.School -> SchoolSelectionScreen(
             index = index,
             loading = loading,
             error = error,
@@ -96,6 +128,8 @@ fun WebImportFlow(
             onFinished = onClose,
             onBack = { step = Step.Adapter(s.school) },
         )
+        }
+        }  // SwipeBackBox
     }
 
     // 首次进入后台刷新索引（缓存优先展示，失败静默保留缓存）

@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.today
 
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +25,11 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -33,12 +39,14 @@ import com.buguake.timetable.data.EntryWithCourse
 import com.buguake.timetable.data.ScheduleSettings
 import com.buguake.timetable.data.TimeUtils
 import com.buguake.timetable.data.WeekCalculator
+import com.buguake.timetable.ui.theme.AppMotion
 import java.time.LocalDate
 import java.time.LocalTime
 
 private val DAY_NAMES = listOf("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
 
 /** 今日页：正在上课 Hero 卡 + 下一节课 + 今日时间轴。 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TodayScreen(
     entries: List<EntryWithCourse>,
@@ -55,7 +63,7 @@ fun TodayScreen(
             .filter { it.dayOfWeek == today.dayOfWeek.value && it.isInWeek(currentWeek) }
             .sortedBy { it.minutesOfDay(settings.sectionTimes)?.first ?: 99 * 60 }
     }
-    val now = remember { LocalTime.now() }
+    val now = com.buguake.timetable.ui.theme.rememberNowMinute()  // 每分钟自动更新
     val nowMinutes = now.hour * 60 + now.minute
 
     val ongoing = todayEntries.firstOrNull { e ->
@@ -70,7 +78,7 @@ fun TodayScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -82,18 +90,79 @@ fun TodayScreen(
 
         when {
             todayEntries.isEmpty() -> item {
-                Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
-                    Text("今日无课", style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 空态：淡入 + 上滑入场
+                var shown by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { shown = true }
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = shown,
+                    enter = androidx.compose.animation.fadeIn(AppMotion.effects()) +
+                        androidx.compose.animation.slideInVertically(AppMotion.spatial()) { it / 10 },
+                ) {
+                    Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
+                        Text("今日无课", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
             else -> {
-                ongoing?.let { e ->
-                    item { OngoingCard(e, settings, nowMinutes, glass) }
+                // 正在上课 / 下一节课：课程边界跨过时平滑滑动切换，而不是硬切
+                item {
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = ongoing,
+                        transitionSpec = {
+                            val move = AppMotion.spatial<androidx.compose.ui.unit.IntOffset>()
+                            if (targetState != null && initialState == null) {
+                                (androidx.compose.animation.slideInVertically(move) { it / 3 } +
+                                    androidx.compose.animation.fadeIn(AppMotion.effectsFast()))
+                                    .togetherWith(androidx.compose.animation.fadeOut(AppMotion.effectsFast()))
+                            } else if (targetState == null) {
+                                (androidx.compose.animation.fadeIn(AppMotion.effectsFast()))
+                                    .togetherWith(
+                                        androidx.compose.animation.slideOutVertically(move) { -it / 3 } +
+                                            androidx.compose.animation.fadeOut(AppMotion.effectsFast())
+                                    )
+                            } else {
+                                (androidx.compose.animation.slideInHorizontally(move) { it / 4 } +
+                                    androidx.compose.animation.fadeIn(AppMotion.effectsFast()))
+                                    .togetherWith(
+                                        androidx.compose.animation.slideOutHorizontally(move) { -it / 4 } +
+                                            androidx.compose.animation.fadeOut(AppMotion.effectsFast())
+                                    )
+                            }
+                        },
+                        label = "ongoingHero",
+                    ) { e ->
+                        e?.let { OngoingCard(it, settings, nowMinutes, glass) }
+                    }
                 }
-                next?.let { e ->
-                    if (ongoing == null || ongoing.entryId != next.entryId) {
-                        item { NextCard(e, settings, nowMinutes, glass) }
+                item {
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = next,
+                        transitionSpec = {
+                            val move = AppMotion.spatial<androidx.compose.ui.unit.IntOffset>()
+                            if (targetState != null && initialState == null) {
+                                (androidx.compose.animation.slideInVertically(move) { it / 3 } +
+                                    androidx.compose.animation.fadeIn(AppMotion.effectsFast()))
+                                    .togetherWith(androidx.compose.animation.fadeOut(AppMotion.effectsFast()))
+                            } else if (targetState == null) {
+                                (androidx.compose.animation.fadeIn(AppMotion.effectsFast()))
+                                    .togetherWith(androidx.compose.animation.fadeOut(AppMotion.effectsFast()))
+                            } else {
+                                (androidx.compose.animation.slideInHorizontally(move) { it / 4 } +
+                                    androidx.compose.animation.fadeIn(AppMotion.effectsFast()))
+                                    .togetherWith(
+                                        androidx.compose.animation.slideOutHorizontally(move) { -it / 4 } +
+                                            androidx.compose.animation.fadeOut(AppMotion.effectsFast())
+                                    )
+                            }
+                        },
+                        label = "nextHero",
+                    ) { e ->
+                        e?.let { n ->
+                            if (ongoing == null || ongoing.entryId != n.entryId) {
+                                NextCard(n, settings, nowMinutes, glass)
+                            }
+                        }
                     }
                 }
                 item {
@@ -116,7 +185,7 @@ fun TodayScreen(
                     }
                 } else {
                     items(todayEntries, key = { it.entryId }) { e ->
-                        TimelineItem(e, settings, nowMinutes)
+                        TimelineItem(e, settings, nowMinutes, modifier = Modifier.animateItem())
                     }
                 }
             }
@@ -168,18 +237,39 @@ private fun OngoingCard(
             if (span != null) {
                 val fraction = ((nowMinutes - span.first).toFloat() / (span.second - span.first))
                     .coerceIn(0f, 1f)
+                // 进度条平滑流动，剩余分钟数字滚动，不再逐帧跳变
+                val animatedFraction by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = fraction,
+                    animationSpec = AppMotion.spatial(),
+                    label = "classProgress",
+                )
                 LinearProgressIndicator(
-                    progress = { fraction },
+                    progress = { animatedFraction },
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                     color = cs.primary,
                     trackColor = cs.primaryContainer,
                 )
-                Text(
-                    "还剩 ${span.second - nowMinutes} 分钟 · ${TimeUtils.hm(LocalTime.of(span.second / 60, span.second % 60))} 下课",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (glass) cs.onSurfaceVariant else cs.onPrimaryContainer.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 4.dp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "还剩 ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (glass) cs.onSurfaceVariant else cs.onPrimaryContainer.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    com.buguake.timetable.ui.theme.RollingNumber(
+                        value = (span.second - nowMinutes).coerceAtLeast(0),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (glass) cs.onSurfaceVariant else cs.onPrimaryContainer.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Text(
+                        " 分钟 · ${TimeUtils.hm(LocalTime.of(span.second / 60, span.second % 60))} 下课",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (glass) cs.onSurfaceVariant else cs.onPrimaryContainer.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
         }
     }
@@ -210,11 +300,19 @@ private fun NextCard(
                 Text("下一节课", style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
                 Spacer(Modifier.weight(1f))
                 if (sM > nowMinutes) {
-                    Text(
-                        "${sM - nowMinutes} 分钟后",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = cs.primary,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        com.buguake.timetable.ui.theme.RollingNumber(
+                            value = sM - nowMinutes,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = cs.primary,
+                        )
+                        Text(
+                            " 分钟后",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = cs.primary,
+                        )
+                    }
                 }
             }
             Text(e.courseName, style = MaterialTheme.typography.titleMedium,
@@ -244,6 +342,7 @@ private fun TimelineItem(
     settings: ScheduleSettings,
     nowMinutes: Int,
     transparent: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val cs = MaterialTheme.colorScheme
     val span = e.minutesOfDay(settings.sectionTimes)
@@ -282,7 +381,9 @@ private fun TimelineItem(
         trailingContent = {
             Box(Modifier.size(10.dp).background(colorFor(e), CircleShape))
         },
-        modifier = Modifier.alpha(if (finished) 0.55f else 1f),
+        modifier = modifier.alpha(
+            com.buguake.timetable.ui.theme.animateFadeAlpha(if (finished) 0.55f else 1f)
+        ),
     )
 }
 

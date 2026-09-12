@@ -31,11 +31,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /** 新增排课：课程名 / 教师 / 地点 / 星期 / 节次 / 自定义周次。
- *  @param maxWeek 已识别课表的最长周（默认选中 1..maxWeek；0 表示无课表，默认 1-17） */
+ *  @param maxWeek 已识别课表的最长周（默认选中 1..maxWeek；0 表示无课表，默认 1-17）
+ *  @param prefillDay / prefillSection 长按网格空白处的预填落点（星期 / 起始节） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddCourseSheet(
     maxWeek: Int = 17,
+    prefillDay: Int? = null,
+    prefillSection: Int? = null,
     onSave: (
         name: String, teacher: String, location: String,
         dayOfWeek: Int, startSection: Int?, endSection: Int?, weeks: List<Int>,
@@ -45,9 +48,9 @@ fun AddCourseSheet(
     var name by rememberSaveable { mutableStateOf("") }
     var teacher by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
-    var day by rememberSaveable { mutableIntStateOf(1) }
-    var startSec by rememberSaveable { mutableIntStateOf(1) }
-    var endSec by rememberSaveable { mutableIntStateOf(2) }
+    var day by rememberSaveable { mutableIntStateOf(prefillDay ?: 1) }
+    var startSec by rememberSaveable { mutableIntStateOf(prefillSection ?: 1) }
+    var endSec by rememberSaveable { mutableIntStateOf(prefillSection ?: 2) }
     // 自定义周次：默认按识别到的最长周选中 1..maxWeek（可手动增删）
     val defaultMax = maxWeek.coerceIn(1, 17)
     var selectedWeeks by rememberSaveable { mutableStateOf((1..defaultMax).toSet()) }
@@ -62,94 +65,110 @@ fun AddCourseSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("新增课程", style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("课程名 *") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = teacher,
-                onValueChange = { teacher = it },
-                label = { Text("教师") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = location,
-                onValueChange = { location = it },
-                label = { Text("地点（校区/楼号/教室，如：下沙 环宇楼 A404）") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            com.buguake.timetable.ui.theme.StaggerIn(0) {
+                Text("新增课程", style = MaterialTheme.typography.titleLarge)
+            }
+            com.buguake.timetable.ui.theme.StaggerIn(1) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("课程名 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            com.buguake.timetable.ui.theme.StaggerIn(2) {
+                OutlinedTextField(
+                    value = teacher,
+                    onValueChange = { teacher = it },
+                    label = { Text("教师") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            com.buguake.timetable.ui.theme.StaggerIn(3) {
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("地点（校区/楼号/教室，如：下沙 环宇楼 A404）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             // 星期选择（周一~周日）
-            Text("星期", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("一", "二", "三", "四", "五", "六", "日").forEachIndexed { i, label ->
-                    FilterChip(
-                        selected = day == i + 1,
-                        onClick = { day = i + 1 },
-                        label = { Text(label) },
-                    )
+            com.buguake.timetable.ui.theme.StaggerIn(4) {
+                Text("星期", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("一", "二", "三", "四", "五", "六", "日").forEachIndexed { i, label ->
+                        FilterChip(
+                            selected = day == i + 1,
+                            onClick = { day = i + 1 },
+                            label = { Text(label) },
+                        )
+                    }
                 }
             }
 
             // 节次范围（下拉选择 1..12）
-            Text("节次", style = MaterialTheme.typography.labelLarge)
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("从", style = MaterialTheme.typography.bodyMedium)
-                SectionDropdown(selected = startSec, onSelect = { startSec = it })
-                Text("到", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 12.dp))
-                SectionDropdown(selected = endSec, onSelect = { endSec = it })
-            }
-
-            // 自定义周次（1-17 多选；默认选中识别到的最长周范围）
-            Row(
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("周次", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                Text(
-                    "已选 ${selectedWeeks.size} 周" + if (defaultMax < 17) " · 默认至第 ${defaultMax} 周" else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TextButton(onClick = { selectedWeeks = (1..defaultMax).toSet() }) { Text("重置") }
-                TextButton(onClick = { selectedWeeks = allWeeksRange.toSet() }) { Text("全选") }
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(allWeeksRange.toList()) { w ->
-                    FilterChip(
-                        selected = w in selectedWeeks,
-                        onClick = {
-                            selectedWeeks = if (w in selectedWeeks) selectedWeeks - w
-                            else selectedWeeks + w
-                        },
-                        label = { Text("$w") },
-                    )
+            com.buguake.timetable.ui.theme.StaggerIn(5) {
+                Text("节次", style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("从", style = MaterialTheme.typography.bodyMedium)
+                    SectionDropdown(selected = startSec, onSelect = { startSec = it })
+                    Text("到", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 12.dp))
+                    SectionDropdown(selected = endSec, onSelect = { endSec = it })
                 }
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(top = 6.dp),
-            ) {
-                TextButton(onClick = onDismiss) { Text("取消") }
-                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                Button(
-                    onClick = {
-                        if (name.trim().isNotEmpty()) {
-                            val s = startSec.coerceAtMost(endSec)
-                            val e = endSec.coerceAtLeast(startSec)
-                            onSave(name, teacher, location, day, s, e, selectedWeeks.sorted())
-                        }
-                        onDismiss()
-                    },
-                    enabled = name.trim().isNotEmpty(),
-                ) { Text("保存") }
+            // 自定义周次（1-17 多选；默认选中识别到的最长周范围）
+            com.buguake.timetable.ui.theme.StaggerIn(6) {
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("周次", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    Text(
+                        "已选 ${selectedWeeks.size} 周" + if (defaultMax < 17) " · 默认至第 ${defaultMax} 周" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = { selectedWeeks = (1..defaultMax).toSet() }) { Text("重置") }
+                    TextButton(onClick = { selectedWeeks = allWeeksRange.toSet() }) { Text("全选") }
+                }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(allWeeksRange.toList()) { w ->
+                        FilterChip(
+                            selected = w in selectedWeeks,
+                            onClick = {
+                                selectedWeeks = if (w in selectedWeeks) selectedWeeks - w
+                                else selectedWeeks + w
+                            },
+                            label = { Text("$w") },
+                        )
+                    }
+                }
+            }
+
+            com.buguake.timetable.ui.theme.StaggerIn(7) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(top = 6.dp),
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    Button(
+                        onClick = {
+                            if (name.trim().isNotEmpty()) {
+                                val s = startSec.coerceAtMost(endSec)
+                                val e = endSec.coerceAtLeast(startSec)
+                                onSave(name, teacher, location, day, s, e, selectedWeeks.sorted())
+                            }
+                            onDismiss()
+                        },
+                        enabled = name.trim().isNotEmpty(),
+                    ) { Text("保存") }
+                }
             }
         }
     }

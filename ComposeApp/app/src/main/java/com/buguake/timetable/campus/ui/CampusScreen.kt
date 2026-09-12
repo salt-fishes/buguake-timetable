@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 /**
  * 校园 tab 首页：以功能入口列表承载校园相关功能。
  * 新增功能只需在 [CAMPUS_FEATURES] 追加一条，首页与二级页导航自动生效。
+ *
+ * 二级页（功能页）与三级页（功能页内部页）统一由 [CampusStepHost] 提供
+ * 进入/退出方向一致的滑动 + 淡入淡出动画。
  */
 @Composable
 fun CampusScreen(
@@ -25,22 +28,36 @@ fun CampusScreen(
     showSnackbar: (String) -> Unit,
     /** 「长按应用图标 → 快速开锁」快捷方式序号（>0 时直接进入宿舍开门页并开门）。 */
     openUnlockSeq: Int = 0,
+    /** 开门页消费完本次直达请求后回传序号，供上层做一次性放行（防切页/返回重复开门）。 */
+    onUnlockConsumed: (Int) -> Unit = {},
 ) {
     var activeId by rememberSaveable { mutableStateOf<String?>(null) }
-    val feature = CAMPUS_FEATURES.firstOrNull { it.id == activeId }
-
-    BackHandler(enabled = feature != null) { activeId = null }
 
     // 快捷方式进入：直达宿舍开门页（页内会用默认门锁自动开门）
     LaunchedEffect(openUnlockSeq) {
         if (openUnlockSeq > 0) activeId = CAMPUS_FEATURES.first().id
     }
 
-    if (feature != null) {
-        feature.content(glass, showSnackbar, openUnlockSeq) { activeId = null }
-        return
-    }
+    // 兜底返回：功能页自身若未处理返回，则退回首页
+    BackHandler(enabled = activeId != null) { activeId = null }
 
+    CampusStepHost(
+        step = activeId,
+        depth = { if (it == null) 0 else 1 },
+        onBack = { activeId = null },
+    ) { id ->
+        val feature = CAMPUS_FEATURES.firstOrNull { it.id == id }
+        if (feature == null) {
+            CampusHome(glass = glass, onOpen = { activeId = it })
+        } else {
+            feature.content(glass, showSnackbar, openUnlockSeq, onUnlockConsumed) { activeId = null }
+        }
+    }
+}
+
+/** 校园首页列表。 */
+@Composable
+private fun CampusHome(glass: Boolean, onOpen: (String) -> Unit) {
     Scaffold(containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
     else MaterialTheme.colorScheme.surface) { padding ->
         Column(
@@ -48,7 +65,8 @@ fun CampusScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 104.dp),
         ) {
             Text(
                 "校园",
@@ -64,7 +82,7 @@ fun CampusScreen(
             Spacer(Modifier.height(16.dp))
 
             CAMPUS_FEATURES.forEach { f ->
-                CampusEntryCard(f) { activeId = f.id }
+                CampusEntryCard(f) { onOpen(f.id) }
             }
         }
     }

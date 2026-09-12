@@ -6,4 +6,5 @@
     <color name="widget_text_secondary">#5B5962</color>
     <color name="widget_accent">#585992</color>
     <color name="widget_divider">#1F000000</color>
+    <color name="splash_bg">#FBF7FD</color>
 </resources>

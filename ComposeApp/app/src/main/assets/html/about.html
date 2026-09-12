@@ -15,7 +15,7 @@
   }
   *{box-sizing:border-box}
   body{
-    margin:0; padding:18px 18px 44px;
+    margin:0; padding:18px 18px 120px;
     font:15px/1.75 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     color:var(--fg); background:var(--bg); -webkit-text-size-adjust:100%;
   }
@@ -33,6 +33,15 @@
   td.k{ width:26%; color:var(--dim); padding-right:10px }
   tr:last-child td{ border-bottom:none }
   .ver{ color:var(--accent); font-weight:600 }
+  details.card{ padding:0 }
+  details.card summary{
+    cursor:pointer; padding:12px 14px; color:var(--accent); font-weight:600;
+    list-style:none; user-select:none;
+  }
+  details.card summary::-webkit-details-marker{ display:none }
+  details.card summary::after{ content:"▸"; float:right; transition:transform .2s }
+  details.card[open] summary::after{ transform:rotate(90deg) }
+  details.card .verlist{ padding:2px 14px 12px }
   button{
     font:inherit; color:var(--accent); font-weight:600;
     background:var(--btn); border:1px solid var(--line);
@@ -52,7 +61,7 @@
     <tr><td class="k">宿舍开门</td><td>登录一次后本机蓝牙开门；支持长按图标「快速开锁」，可选指纹/面容验证</td></tr>
     <tr><td class="k">多课表与周视图</td><td>多套课表并存随时切换，左右滑动换周、今日高亮</td></tr>
     <tr><td class="k">今日页</td><td>正在上课 / 下一节课 / 今日时间轴</td></tr>
-    <tr><td class="k">桌面小组件</td><td>2×2 / 2×3 / 2×4 三种规格，可分别绑定课表</td></tr>
+    <tr><td class="k">桌面小组件</td><td>2×2 / 3×2 / 4×2（今明双栏）三种规格，可分别绑定课表</td></tr>
     <tr><td class="k">上课提醒</td><td>课前 5/10/15/20 分钟本地通知，准点触发</td></tr>
     <tr><td class="k">系统日历同步</td><td>课程直接写入系统日历，可一键清空</td></tr>
     <tr><td class="k">课表对比与调课</td><td>截图识别占用找共同空闲；长按拖拽跨天跨节次调课</td></tr>
@@ -61,7 +70,36 @@
 </div>
 
 <h2>更新记录</h2>
-<div class="card">
+<details class="card">
+  <summary>点击展开历史更新记录</summary>
+  <div class="verlist">
+  <p><b>v1.4</b></p>
+  <ul>
+    <li>宿舍开门页整页重构：解决该页文字重叠问题，数据详情页与主页转场和全应用一致</li>
+    <li>快捷方式「快速开锁」只触发一次：切换页面后返回不再重复开门</li>
+    <li>二 / 三级页转场升级为深度缩放 + 淡切：进入迎面放大、返回缩回退场，方向随层级变化</li>
+    <li>选择学校页支持边缘侧滑返回；底部导航栏改为居中悬浮岛（投影 + 玻璃底）；黑夜模式启动图标更新</li>
+    <li>全部二级 / 三级页面统一进入与退出转场，均支持边缘侧滑返回；截图识别校正页补齐动画与返回</li>
+    <li>全应用细节动效补全：周次与数字滚动、进入退场淡切、卡片与开关触感反馈贯穿各页面</li>
+    <li>首页周次滑动抖动修复；周数滑杆限定在学期内，手动左右滑页仍不受限制</li>
+    <li>关于页更新记录改为默认收起</li>
+  </ul>
+  <p><b>v1.3</b></p>
+  <ul>
+    <li>考试安排合并进首页课表：教务读取的考试按真实时间自动落位，节次轴自动显示考试时间区间；块内显示学分 / 座位号 / 地点</li>
+    <li>考试设置页精简为纯列表；新增「首页显示考试」开关</li>
+    <li>周次不再受开学时间限制：开学前按真实日期自动定位，可自由翻页</li>
+    <li>长按空白格添加课程（自动预填星期与节次）；长按调课范围可在设置中固定，不再每次询问</li>
+    <li>作息表支持统一设置课程时间（起始 + 节时长 + 节间休息），并可保存预设一键切换</li>
+    <li>背景图改走系统原生裁剪；换图自动清理旧背景并即时刷新；内置渐变背景改为曲线边缘光</li>
+    <li>门锁改为手动同步，进页面不再自动刷新</li>
+    <li>小组件 2×4 改为 4×2 双栏：左栏今天、右栏明天</li>
+  </ul>
+  <p><b>v1.2</b></p>
+  <ul>
+    <li>考试安排上线：应用内登录正方教务，自动读取考试时间 / 考场 / 座位号，支持列表与周次视图、写入日历与导出</li>
+    <li>多课表绑定小组件：每个桌面小组件可绑定不同课表</li>
+  </ul>
   <p><b>v1.1</b></p>
   <ul>
     <li>宿舍开门改为离线优先：登录一次后门锁密钥本地加密保存，日常开门不再联网、不再重复登录</li>
@@ -81,7 +119,8 @@
     <li>教务网页导入上线（基于拾光开源适配生态）；校园页上线云莓宿舍蓝牙开门</li>
     <li>多课表 / 周视图 / 小组件 / 提醒 / 日历同步 / 课表对比；液态玻璃界面风格</li>
   </ul>
-</div>
+  </div>
+</details>
 
 <h2>开源与致谢</h2>
 <p>教务导入能力来自<b>拾光课程表适配生态</b>（shiguangschedule · shiguang_warehouse）：适配脚本由社区共同维护，本应用只是执行者，感谢每一位提交过适配的贡献者。</p>

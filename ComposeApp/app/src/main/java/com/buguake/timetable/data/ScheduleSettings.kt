@@ -24,6 +24,9 @@ data class SectionTime(
     val end: LocalTime,
 )
 
+/** 已保存的作息表预设（快捷切换用）。 */
+data class SectionPreset(val name: String, val csv: String)
+
 /** 用户设置（全局显示项 + 活动课表派生的学期信息）。 */
 data class ScheduleSettings(
     val semesterStart: Long,          // 活动课表第一周周一 00:00 的 epoch 毫秒
@@ -43,6 +46,8 @@ data class ScheduleSettings(
     val customBgBlurDp: Int,          // 背景模糊强度（dp，0..28）
     val timetableId: Long = 0,        // 活动课表 id（0 = 尚未就绪）
     val timetableName: String = "",   // 活动课表名
+    val showExamsOnHome: Boolean = true, // 首页课表是否叠加显示教务考试（默认开）
+    val moveScope: String = SettingsRepository.MOVE_SCOPE_ASK, // 长按移动课程范围：ask/this_week/rest_of_term
 ) {
     val semesterStartDate: LocalDate?
         get() = if (semesterStart == 0L) null
@@ -212,6 +217,38 @@ class SettingsRepository private constructor(context: Context) {
     fun setCustomBgBlur(dp: Int) =
         prefs.edit().putInt(KEY_CUSTOM_BG_BLUR, dp.coerceIn(0, 28)).apply()
 
+    /** 首页课表是否叠加显示考试。 */
+    fun setShowExamsOnHome(value: Boolean) =
+        prefs.edit().putBoolean(KEY_SHOW_EXAMS_ON_HOME, value).apply()
+
+    /** 长按移动课程的作用范围（ask = 每次询问）。 */
+    fun setMoveScope(scope: String) =
+        prefs.edit().putString(KEY_MOVE_SCOPE, scope).apply()
+
+    // ---- 作息表预设（保存当前作息，快捷切换）----
+
+    fun sectionPresets(): List<SectionPreset> {
+        val raw = prefs.getString(KEY_SECTION_PRESETS, "") ?: ""
+        return raw.split('\n').mapNotNull { line ->
+            val i = line.indexOf('\t')
+            if (i <= 0) null else SectionPreset(line.substring(0, i), line.substring(i + 1))
+        }
+    }
+
+    /** 保存/覆盖同名预设（csv = encodeSections 后的完整作息表）。 */
+    fun saveSectionPreset(name: String, csv: String) {
+        if (name.isBlank() || csv.isBlank()) return
+        val rest = sectionPresets().filter { it.name != name }
+        val joined = (rest + SectionPreset(name, csv)).joinToString("\n") { "${it.name}\t${it.csv}" }
+        prefs.edit().putString(KEY_SECTION_PRESETS, joined).apply()
+    }
+
+    fun deleteSectionPreset(name: String) {
+        val rest = sectionPresets().filter { it.name != name }
+        val joined = rest.joinToString("\n") { "${it.name}\t${it.csv}" }
+        prefs.edit().putString(KEY_SECTION_PRESETS, joined).apply()
+    }
+
     /** 调整一日节数：写活动课表（完成后再返回，调用方随后刷新小组件/提醒）。 */
     suspend fun setSectionsPerDay(n: Int) {
         val count = n.coerceIn(4, 16)
@@ -256,6 +293,8 @@ class SettingsRepository private constructor(context: Context) {
             customBgEnabled = prefs.getBoolean(KEY_CUSTOM_BG_ENABLED, true),
             customBgPath = prefs.getString(KEY_CUSTOM_BG_PATH, "") ?: "",
             customBgBlurDp = prefs.getInt(KEY_CUSTOM_BG_BLUR, CUSTOM_BG_BLUR_DEFAULT),
+            showExamsOnHome = prefs.getBoolean(KEY_SHOW_EXAMS_ON_HOME, true),
+            moveScope = prefs.getString(KEY_MOVE_SCOPE, MOVE_SCOPE_ASK) ?: MOVE_SCOPE_ASK,
         )
     }
 
@@ -277,6 +316,14 @@ class SettingsRepository private constructor(context: Context) {
         private const val KEY_CUSTOM_BG_ENABLED = "custom_bg_enabled"
         private const val KEY_CUSTOM_BG_PATH = "custom_bg_path"
         private const val KEY_CUSTOM_BG_BLUR = "custom_bg_blur_dp"
+        private const val KEY_SHOW_EXAMS_ON_HOME = "show_exams_on_home"
+        private const val KEY_MOVE_SCOPE = "move_scope"
+        private const val KEY_SECTION_PRESETS = "section_presets"
+
+        /** 长按移动课程的作用范围取值。 */
+        const val MOVE_SCOPE_ASK = "ask"            // 每次弹窗询问
+        const val MOVE_SCOPE_THIS_WEEK = "this_week" // 固定「仅本周」
+        const val MOVE_SCOPE_REST = "rest_of_term"   // 固定「以后每周」
 
         /** 课前提醒默认提前分钟数。 */
         const val REMIND_MINUTES_DEFAULT = 10

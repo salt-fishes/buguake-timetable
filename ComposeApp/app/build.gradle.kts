@@ -27,8 +27,8 @@ android {
         applicationId = "com.buguake.timetable"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.1"
+        versionCode = 6
+        versionName = "1.4"
 
         // 仅保留 arm64-v8a（已无原生库依赖，收窄以备将来）
         ndk {
@@ -101,6 +101,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     // 教务网页导入：适配器仓库同步（HTTP 下载）
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")

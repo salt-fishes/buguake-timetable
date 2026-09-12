@@ -19,7 +19,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.platform.LocalContext
+import com.buguake.timetable.ui.theme.AppMotion
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,9 +37,6 @@ import com.buguake.timetable.webimport.bridge.JS_BRIDGE_INIT
 import com.buguake.timetable.webimport.bridge.WebBridgeHandler
 import com.buguake.timetable.webimport.bridge.WebDialogHost
 import kotlinx.coroutines.launch
-
-/** 桌面 UA：教务/CAS 页面按 PC 浏览器设计（与拾光 DESKTOP_USER_AGENT 一致）。 */
-private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 /** 桥弹窗的 UI 状态（Host 渲染，Handler 回调驱动）。 */
 private sealed interface BridgeDialog {
@@ -102,36 +101,6 @@ fun ImportWebViewScreen(
     // 地址栏：通用适配器无默认入口，用户自行输入教务网址；随页面导航更新
     var urlInput by remember { mutableStateOf(adapter.importUrl) }
 
-    fun applyDesktopMode(wv: WebView, desktop: Boolean) {
-        wv.settings.userAgentString = if (desktop) DESKTOP_USER_AGENT
-        else android.webkit.WebSettings.getDefaultUserAgent(wv.context)
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
-    }
-
-    /** 桌面模式下补 viewport meta 并触发重排（避免 PC 页按 980px 挤压）。 */
-    fun injectDesktopViewportFix(wv: WebView) {
-        wv.evaluateJavascript(
-            """
-            (function() {
-                try {
-                    var metas = document.getElementsByTagName('meta');
-                    for (var i = metas.length - 1; i >= 0; i--) {
-                        if (metas[i].getAttribute('name') === 'viewport') {
-                            metas[i].parentNode.removeChild(metas[i]);
-                        }
-                    }
-                    var meta = document.createElement('meta');
-                    meta.name = 'viewport';
-                    meta.content = 'width=1280, initial-scale=1.0, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes';
-                    document.head.appendChild(meta);
-                    window.dispatchEvent(new Event('resize'));
-                } catch(e) {}
-            })();
-            """.trimIndent(), null
-        )
-    }
-
     fun evaluateJs(script: String, callback: ((String?) -> Unit)?) {
         webViewRef?.evaluateJavascript(script, callback)
     }
@@ -175,6 +144,17 @@ fun ImportWebViewScreen(
                 onFinished()
             },
         )
+    }
+
+    // 拾光桥对象：适配器脚本 → Native（与考试读取共用同一套 WebView 外壳，只是桥名与脚本不同）
+    val shiguangBridge = remember {
+        object {
+            @JavascriptInterface
+            fun postMessage(msg: String?) {
+                msg ?: return
+                handler.onMessageReceived(msg)
+            }
+        }
     }
 
     // 目标课表变化同步给 Handler（保存动作以此为作用域）
@@ -233,10 +213,19 @@ fun ImportWebViewScreen(
                             wv.reload()
                         }
                     }) {
-                        Text(
-                            if (desktopMode) "桌面" else "手机",
-                            style = MaterialTheme.typography.labelLarge,
-                        )
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = desktopMode,
+                            transitionSpec = {
+                                androidx.compose.animation.fadeIn(com.buguake.timetable.ui.theme.AppMotion.effectsFast())
+                                    .togetherWith(androidx.compose.animation.fadeOut(com.buguake.timetable.ui.theme.AppMotion.effectsFast()))
+                            },
+                            label = "uaToggle",
+                        ) { desktop ->
+                            Text(
+                                if (desktop) "桌面" else "手机",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -297,90 +286,47 @@ fun ImportWebViewScreen(
                 )
                 TextButton(onClick = { goToUrl(urlInput) }) { Text("前往") }
             }
-            if (progress < 100) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = progress < 100,
+                enter = androidx.compose.animation.expandVertically(com.buguake.timetable.ui.theme.AppMotion.spatial()) +
+                    androidx.compose.animation.fadeIn(com.buguake.timetable.ui.theme.AppMotion.effects()),
+                exit = androidx.compose.animation.shrinkVertically(com.buguake.timetable.ui.theme.AppMotion.spatialFast()) +
+                    androidx.compose.animation.fadeOut(com.buguake.timetable.ui.theme.AppMotion.effectsFast()),
+            ) {
+                val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = progress / 100f,
+                    animationSpec = com.buguake.timetable.ui.theme.AppMotion.effects(),
+                    label = "webProgress",
+                )
                 LinearProgressIndicator(
-                    progress = { progress / 100f },
+                    progress = { animatedProgress },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            databaseEnabled = true
-                            // 学校站点常见 http 资源混载，放行
-                            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            useWideViewPort = true
-                            loadWithOverviewMode = true
-                            setSupportZoom(true)
-                            builtInZoomControls = true
-                            displayZoomControls = false
-                        }
-                        applyDesktopMode(this, desktopMode)
-                        // 仅 debug 构建允许 chrome://inspect 远程调试：
-                        // 正式包若放开，任何拿到设备的人都能查看教务会话页面内容
-                        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-                        addJavascriptInterface(
-                            object {
-                                @JavascriptInterface
-                                fun postMessage(msg: String?) {
-                                    msg ?: return
-                                    handler.onMessageReceived(msg)
-                                }
-                            },
-                            "_shiguangNativeBridge",
-                        )
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-                                super.onPageStarted(view, url, favicon)
-                                // 正式包不打印页面地址：教务 URL 常带会话参数
-                                if (BuildConfig.DEBUG) android.util.Log.i("WebImport", "页面加载: $url")
-                                urlInput = url
-                                // 新页面 = 新 JS 全局作用域，重复注入守卫复位
-                                injectedAtTable = null
-                                // 每次导航都确保桥已挂载（脚本幂等）
-                                view.evaluateJavascript(JS_BRIDGE_INIT, null)
-                            }
-
-                            override fun onPageFinished(view: WebView, url: String) {
-                                super.onPageFinished(view, url)
-                                if (desktopMode) injectDesktopViewportFix(view)
-                                if (pendingInject) {
-                                    pendingInject = false
-                                    // 等页面脚本（jQuery 等）就绪后自动重新注入
-                                    view.postDelayed({ injectAdapter() }, 600)
-                                }
-                            }
-
-                            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-                                super.doUpdateVisitedHistory(view, url, isReload)
-                                view.evaluateJavascript(JS_BRIDGE_INIT, null)
-                            }
-                        }
-                        setWebChromeClient(object : android.webkit.WebChromeClient() {
-                            override fun onProgressChanged(view: WebView, newProgress: Int) {
-                                progress = newProgress
-                            }
-
-                            // 脚本错误/日志捕获：适配器脚本的执行异常都在这里现形
-                            // （正式包不记录控制台内容：页面自行打印的信息可能含会话串）
-                            override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage): Boolean {
-                                if (BuildConfig.DEBUG) {
-                                    android.util.Log.i(
-                                        "WebImport",
-                                        "JS[${consoleMessage.messageLevel()}] ${consoleMessage.message()} " +
-                                            "(${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
-                                    )
-                                }
-                                return true
-                            }
-                        })
-                        adapter.importUrl.takeIf { it.isNotBlank() }?.let { loadUrl(it) }
+            JwxtWebView(
+                bridgeName = "_shiguangNativeBridge",
+                bridge = shiguangBridge,
+                startUrl = adapter.importUrl.takeIf { it.isNotBlank() },
+                desktopMode = desktopMode,
+                onPageStarted = { view, url ->
+                    // 正式包不打印页面地址：教务 URL 常带会话参数
+                    if (BuildConfig.DEBUG) android.util.Log.i("WebImport", "页面加载: $url")
+                    urlInput = url
+                    // 新页面 = 新 JS 全局作用域，重复注入守卫复位
+                    injectedAtTable = null
+                    // 每次导航都确保桥已挂载（脚本幂等）
+                    view.evaluateJavascript(JS_BRIDGE_INIT, null)
+                },
+                onPageFinished = { view, _ ->
+                    if (pendingInject) {
+                        pendingInject = false
+                        // 等页面脚本（jQuery 等）就绪后自动重新注入
+                        view.postDelayed({ injectAdapter() }, 600)
                     }
                 },
-                update = { webViewRef = it },
+                onHistoryChanged = { view, _ -> view.evaluateJavascript(JS_BRIDGE_INIT, null) },
+                onProgress = { progress = it },
+                onWebView = { webViewRef = it },
                 modifier = Modifier.fillMaxSize(),
             )
         }

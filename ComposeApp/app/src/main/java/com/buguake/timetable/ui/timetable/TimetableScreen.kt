@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -91,6 +92,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.buguake.timetable.ui.theme.AppMotion
+import com.buguake.timetable.campus.ui.toTimetableEntry
 import com.buguake.timetable.data.EntryWithCourse
 import com.buguake.timetable.data.ScheduleRepository
 import com.buguake.timetable.data.ScheduleSettings
@@ -108,9 +110,14 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 import java.time.LocalTime
 
-private val ROW_HEIGHT = 56.dp
-private val AXIS_WIDTH = 46.dp
+internal val ROW_HEIGHT = 56.dp
+internal val AXIS_WIDTH = 46.dp
 private val WEEKDAY_NAMES = listOf("一", "二", "三", "四", "五", "六", "日")
+
+// 翻页范围余量：HorizontalPager 需要有限页数，向前/向后放宽到实际用不到的边界，
+// 视觉效果即「翻页不做限制」
+private const val WEEK_PAGE_FLOOR = -260
+private const val WEEK_PAGE_CEIL_EXTRA = 104
 
 /** 课程类型 -> 表格标记符（与 PDF 图例一致）。 */
 internal fun typeSymbol(type: String): String = when (type) {
@@ -136,6 +143,7 @@ fun TimetableScreen(
     onShowSnackbar: (String) -> Unit,
     onImportClick: () -> Unit = {},
     onAddClick: () -> Unit = {},
+    onAddAt: (day: Int, section: Int) -> Unit = { _, _ -> },  // 长按网格空白处添加课程
     onMoveEntry: (EntryWithCourse, Int, Int, Int, Int) -> Unit = { _, _, _, _, _ -> },
     timetables: List<TimetableInfo> = emptyList(),
     onSwitchTimetable: (Long) -> Unit = {},
@@ -145,31 +153,59 @@ fun TimetableScreen(
 ) {
     val today = remember { LocalDate.now() }
     val semesterStart = settings.semesterStartDate
-    val rawCurrentWeek = WeekCalculator.currentWeek(settings.semesterStartDate, today)
-    val currentWeek = rawCurrentWeek.coerceAtLeast(1)
-    // 展示中的周是否包含今天（开学前 currentWeek 被钳到 1，不能据此点亮"今日"）
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // 教务系统读取的考试合并进课表网格：负数 id 与真实课程条目区分；
+    // 设置里关掉「首页显示考试」则完全不加载
+    val examBundle = remember { com.buguake.timetable.campus.CampusStore.getInstance(context).loadExams() }
+    val examPairs = remember(examBundle, semesterStart, settings.showExamsOnHome) {
+        if (semesterStart == null || !settings.showExamsOnHome) emptyList()
+        else examBundle?.exams.orEmpty().filter { it.hasTime }.mapIndexed { i, e ->
+            val week = com.buguake.timetable.campus.ui.weekIndex(
+                com.buguake.timetable.campus.ui.dateOf(e), semesterStart,
+            )
+            e.toTimetableEntry(week, -(i.toLong() + 1)) to e
+        }
+    }
+    val examEntries = examPairs.map { it.first }
+    // 展示中的周是否包含今天
     fun weekContainsToday(w: Int): Boolean {
         val start = semesterStart?.let { WeekCalculator.mondayOfWeek(it, w) } ?: return false
         return !today.isBefore(start) && today.isBefore(start.plusDays(7))
     }
-    val maxEntryWeek = entries.maxOfOrNull { e -> e.weeks.maxOrNull() ?: 0 } ?: 0
-    // 学期总周数由设置决定（默认 17），至少覆盖当前周与已识别最长周
-    val totalWeeks = maxOf(settings.totalWeeks, maxEntryWeek, currentWeek)
+    val rawCurrentWeek = WeekCalculator.currentWeek(settings.semesterStartDate, today)
+    val maxEntryWeek = maxOf(
+        entries.maxOfOrNull { e -> e.weeks.maxOrNull() ?: 0 } ?: 0,
+        examEntries.maxOfOrNull { e -> e.weeks.maxOrNull() ?: 0 } ?: 0,
+    )
+    // 翻页范围不做限制：HorizontalPager 需要有限页数，向前后各放宽足够大的余量
+    // （往前约 5 年，往后在总周数基础上再加 2 年；有更早的考试周则再往左扩）
+    val minExamWeek = examEntries.minOfOrNull { e -> e.weeks.minOrNull() ?: Int.MAX_VALUE } ?: Int.MAX_VALUE
+    val minWeek = minOf(WEEK_PAGE_FLOOR, minExamWeek)
+    val maxWeek = maxOf(settings.totalWeeks, maxEntryWeek, rawCurrentWeek) + WEEK_PAGE_CEIL_EXTRA
 
+    val pageCount = maxWeek - minWeek + 1
     val pagerState = rememberPagerState(
-        initialPage = (currentWeek - 1).coerceIn(0, totalWeeks - 1)
-    ) { totalWeeks }
-    // 切换课表后：按新课表的开学时间重新定位周次（未开学则停在第 1 页，标题显示"未开学"）
+        initialPage = (rawCurrentWeek - minWeek).coerceIn(0, pageCount - 1)
+    ) { pageCount }
+    // 切换课表后：按新课表的开学时间重新定位周次（开学前会落到 0/负周，同样随日期走）
     LaunchedEffect(settings.timetableId) {
-        val w = WeekCalculator.currentWeek(semesterStart, today)
-            .coerceIn(1, totalWeeks)
-        pagerState.scrollToPage(w - 1)
+        val w = rawCurrentWeek.coerceIn(minWeek, maxWeek)
+        pagerState.scrollToPage(w - minWeek)
     }
-    val selectedWeek = pagerState.currentPage + 1
+    // 页码 → 周次：第 0 页对应 minWeek（可为很大的负数）
+    val selectedWeek = pagerState.currentPage + minWeek
+    // 翻页是否进行中：滑动过程中冻结「随周次切换的内容」（轴考试时间/网格外考试列表），
+    // 落定后再切换，避免滑动中途内容高度变化引起上下抖动
+    val paging by remember { androidx.compose.runtime.derivedStateOf { pagerState.currentPageOffsetFraction != 0f } }
+    val settledWeekState = remember { mutableStateOf(selectedWeek) }
+    LaunchedEffect(paging, selectedWeek) {
+        if (!paging) settledWeekState.value = selectedWeek
+    }
+    val settledWeek = settledWeekState.value
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
     var showWeekPicker by rememberSaveable { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
+    var examDetail by remember { mutableStateOf<com.buguake.timetable.campus.exam.CampusExam?>(null) }
     // 动态取色开关：课表块颜色随壁纸主题联动
     val dynamicColor = settings.dynamicColor
 
@@ -187,7 +223,7 @@ fun TimetableScreen(
 
     Column(modifier.fillMaxSize()) {
         // ---- 空状态：无课表数据时引导导入（首启引导） ----
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && examEntries.isEmpty()) {
             Box(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center,
@@ -219,25 +255,35 @@ fun TimetableScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(24.dp))
-                    // 三步引导
-                    GuideStep(1, "在「我的」页选择你的学校", "教务网页导入能力开发中")
+                    // 三步引导：逐行 stagger 入场
+                    com.buguake.timetable.ui.theme.StaggerIn(0) {
+                        GuideStep(1, "在「我的」页选择你的学校", "教务网页导入能力开发中")
+                    }
                     Spacer(Modifier.height(12.dp))
-                    GuideStep(2, "在内嵌浏览器登录教务系统", "账号密码只在浏览器会话内，App 不读取")
+                    com.buguake.timetable.ui.theme.StaggerIn(1) {
+                        GuideStep(2, "在内嵌浏览器登录教务系统", "账号密码只在浏览器会话内，App 不读取")
+                    }
                     Spacer(Modifier.height(12.dp))
-                    GuideStep(3, "点击执行导入", "课程、周次、地点自动落位")
+                    com.buguake.timetable.ui.theme.StaggerIn(2) {
+                        GuideStep(3, "点击执行导入", "课程、周次、地点自动落位")
+                    }
                     Spacer(Modifier.height(28.dp))
-                    androidx.compose.material3.Button(
-                        onClick = onImportClick,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("导入课表")
+                    com.buguake.timetable.ui.theme.StaggerIn(3) {
+                        androidx.compose.material3.Button(
+                            onClick = onImportClick,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("导入课表")
+                        }
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        "教务网页导入已上线，更多学校持续适配中",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    com.buguake.timetable.ui.theme.StaggerIn(4) {
+                        Text(
+                            "教务网页导入已上线，更多学校持续适配中",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 }
             }
@@ -254,93 +300,64 @@ fun TimetableScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
-                    if (rawCurrentWeek < 1) {
-                        // 边界处理：周数为 0/负（未开学或未设置开学时间）时改显开学倒计时
-                        val daysToStart =
-                            semesterStart?.let { java.time.temporal.ChronoUnit.DAYS.between(today, it) }
+                    // 「第 N 周」同一行内联显示：三个 Text 若直接放进 Column 会竖排堆叠。
+                    // 开学前周次可为 0/负（随真实日期自动定位），不再钳到第 1 周
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = when {
-                                semesterStart == null -> "未设置开学时间"
-                                daysToStart != null && daysToStart > 0 -> "距开学还有 $daysToStart 天"
-                                else -> "今天开学"
+                            "第 ",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        // 周数数字滚动切换（水平方向与翻页一致，Expressive 弹性规格）
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = selectedWeek,
+                            transitionSpec = {
+                                val move = AppMotion.spatialFast<androidx.compose.ui.unit.IntOffset>()
+                                if (targetState > initialState) {
+                                    (slideInHorizontally(move) { it / 3 } +
+                                        fadeIn(AppMotion.effectsFast()))
+                                        .togetherWith(
+                                            slideOutHorizontally(move) { -it / 3 } +
+                                                fadeOut(AppMotion.effectsFast())
+                                        )
+                                } else {
+                                    (slideInHorizontally(move) { -it / 3 } +
+                                        fadeIn(AppMotion.effectsFast()))
+                                        .togetherWith(
+                                            slideOutHorizontally(move) { it / 3 } +
+                                                fadeOut(AppMotion.effectsFast())
+                                        )
+                                }
                             },
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (semesterStart == null) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.primary,
-                        )
-                        semesterStart?.let {
+                            label = "weekNumber",
+                        ) { week ->
                             Text(
-                                "开学日：${it.year}年${it.monthValue}月${it.dayOfMonth}日",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 1.dp),
-                            )
-                        }
-                    } else if (rawCurrentWeek < 1) {
-                        // 开学前：不显示周数（未开学），避免与真实第一周混淆
-                        Text(
-                            "未开学",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "开学日：${semesterStart?.let { "${it.monthValue}月${it.dayOfMonth}日" } ?: "未设置"}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 1.dp),
-                        )
-                    } else {
-                        // 「第 N 周」同一行内联显示：三个 Text 若直接放进 Column 会竖排堆叠
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "第 ",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            // 周数数字滚动切换（水平方向与翻页一致，Expressive 弹性规格）
-                            androidx.compose.animation.AnimatedContent(
-                                targetState = selectedWeek,
-                                transitionSpec = {
-                                    val move = AppMotion.spatialFast<androidx.compose.ui.unit.IntOffset>()
-                                    if (targetState > initialState) {
-                                        (slideInHorizontally(move) { it / 3 } +
-                                            fadeIn(AppMotion.effectsFast()))
-                                            .togetherWith(
-                                                slideOutHorizontally(move) { -it / 3 } +
-                                                    fadeOut(AppMotion.effectsFast())
-                                            )
-                                    } else {
-                                        (slideInHorizontally(move) { -it / 3 } +
-                                            fadeIn(AppMotion.effectsFast()))
-                                            .togetherWith(
-                                                slideOutHorizontally(move) { it / 3 } +
-                                                    fadeOut(AppMotion.effectsFast())
-                                            )
-                                    }
-                                },
-                                label = "weekNumber",
-                            ) { week ->
-                                Text(
-                                    "$week",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            Text(
-                                " 周",
+                                "$week",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
                         Text(
-                            text = weekDateRangeLabel(settings.semesterStartDate, selectedWeek),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 1.dp),
+                            " 周",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
+                    // 副标题：开学前显示倒计时，其余显示该周日期范围
+                    Text(
+                        text = when {
+                            semesterStart == null -> "未设置开学时间"
+                            selectedWeek < 1 -> {
+                                val daysToStart =
+                                    java.time.temporal.ChronoUnit.DAYS.between(today, semesterStart)
+                                if (daysToStart > 0) "距开学还有 $daysToStart 天" else "今天开学"
+                            }
+                            else -> weekDateRangeLabel(settings.semesterStartDate, selectedWeek)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 1.dp),
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 // 分享整周课表：离屏绘制 PNG 后调起系统分享
@@ -374,17 +391,24 @@ fun TimetableScreen(
                         sharing = false
                     }
                 }) {
-                    if (sharing) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            Icons.Filled.Share,
-                            contentDescription = "分享本周课表",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    // 图标 ↔ 加载圈交叉淡入，避免瞬切
+                    androidx.compose.animation.Crossfade(
+                        targetState = sharing,
+                        animationSpec = AppMotion.effectsFast(),
+                        label = "shareBusy",
+                    ) { busy ->
+                        if (busy) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.Share,
+                                contentDescription = "分享本周课表",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 IconButton(onClick = onAddClick) {
@@ -440,38 +464,102 @@ fun TimetableScreen(
 
         // ---- 网格主体（外层统一纵向滚动） ----
         val gridHeight = maxSection * ROW_HEIGHT.value
-        Row(
+        // 考试周自动调整：轴上被考试覆盖的节次行改显考试的真实时间区间
+        val axisExamTimes = remember(examPairs, settledWeek, settings.sectionTimes) {
+            buildMap {
+                examPairs.forEach { (entry, _) ->
+                    if (selectedWeek !in entry.weeks) return@forEach
+                    val eff = entry.withEffectiveSections(settings.sectionTimes) ?: return@forEach
+                    val st = entry.customStartTime.ifBlank { return@forEach }
+                    val en = entry.customEndTime.ifBlank { return@forEach }
+                    val s0 = eff.startSection ?: return@forEach
+                    val e0 = eff.endSection ?: s0
+                    for (sec in s0..e0) put(sec, st to en)
+                }
+            }
+        }
+        // 本周放不进网格的考试：真实时间与作息表任何一节都不重叠（如深夜场），
+        // 网格里不渲染，列在网格下方避免丢数据（与考试安排列表互为补充）
+        val offGridExams = remember(examPairs, settledWeek, settings.sectionTimes) {
+            examPairs.mapNotNull { (entry, exam) ->
+                if (settledWeek in entry.weeks &&
+                    entry.withEffectiveSections(settings.sectionTimes) == null
+                ) exam else null
+            }
+        }
+        Column(
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
+                .padding(bottom = 96.dp)
         ) {
-            SectionAxis(
-                sections = 1..maxSection,
-                sectionTimes = settings.sectionTimes,
-                modifier = Modifier
-                    .width(AXIS_WIDTH)
-                    .height(gridHeight.dp),
-            )
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.weight(1f).height(gridHeight.dp),
-            ) { page ->
-                WeekGridPage(
-                    week = page + 1,
-                    allEntries = entries,
-                    visibleDays = visibleDays,
-                    maxSection = maxSection,
-                    isCurrentWeek = (page + 1) == currentWeek && weekContainsToday(page + 1),
-                    today = today,
+            Row(Modifier.fillMaxWidth()) {
+                SectionAxis(
+                    sections = 1..maxSection,
                     sectionTimes = settings.sectionTimes,
-                    showNonCurrentWeek = settings.showNonCurrentWeek,
-                    showTeacherOnBlock = settings.showTeacherOnBlock,
-                    showLocationOnBlock = settings.showLocationOnBlock,
-                    dynamicColor = dynamicColor,
-                    glass = glass,
-                    onCourseClick = onCourseClick,
-                    onMoveEntry = onMoveEntry,
+                    overrideTimes = axisExamTimes,
+                    modifier = Modifier
+                        .width(AXIS_WIDTH)
+                        .height(gridHeight.dp),
                 )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f).height(gridHeight.dp),
+                ) { page ->
+                    val pageWeek = page + minWeek
+                    WeekGridPage(
+                        week = pageWeek,
+                        allEntries = entries + examEntries,
+                        visibleDays = visibleDays,
+                        maxSection = maxSection,
+                        isCurrentWeek = pageWeek == rawCurrentWeek && weekContainsToday(pageWeek),
+                        today = today,
+                        sectionTimes = settings.sectionTimes,
+                        showNonCurrentWeek = settings.showNonCurrentWeek,
+                        showTeacherOnBlock = settings.showTeacherOnBlock,
+                        showLocationOnBlock = settings.showLocationOnBlock,
+                        dynamicColor = dynamicColor,
+                        glass = glass,
+                    onCourseClick = { entry ->
+                        // 考试块（负数 id）点击弹考试详情，不进课程详情
+                        val exam = examPairs.firstOrNull { it.first.entryId == entry.entryId }?.second
+                        if (exam != null) {
+                            Haptics.tick(context)
+                            examDetail = exam
+                        } else onCourseClick(entry)
+                    },
+                        onMoveEntry = { entry, day, start, end, week ->
+                            // 考试块不可拖动改时间，拖动只对真实课程条目生效
+                            if (entry.entryId >= 0) onMoveEntry(entry, day, start, end, week)
+                        },
+                        onAddAt = onAddAt,
+                    )
+                }
+            }
+
+            // 网格外考试：沿用考试安排列表的卡片样式，点击同样弹考试详情；出现/消失平滑展开
+            androidx.compose.animation.AnimatedVisibility(
+                visible = offGridExams.isNotEmpty(),
+                enter = androidx.compose.animation.expandVertically(AppMotion.spatial()) +
+                    fadeIn(AppMotion.effects()),
+                exit = androidx.compose.animation.shrinkVertically(AppMotion.spatialFast()) +
+                    fadeOut(AppMotion.effectsFast()),
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        "不在作息表时间内的考试",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    val now = System.currentTimeMillis()
+                    offGridExams.forEach { e ->
+                        com.buguake.timetable.campus.ui.ExamCard(e, past = e.hasTime && e.startAt < now)
+                    }
+                }
             }
         }
     }
@@ -479,7 +567,13 @@ fun TimetableScreen(
     if (showWeekPicker) {
         ModalBottomSheet(onDismissRequest = { showWeekPicker = false }) {
             // ---- 周数：滑杆 + 回到本周 ----
-            var panelWeek by remember(selectedWeek) { mutableStateOf(selectedWeek.toFloat()) }
+            // 滑杆只在学期内取值（第 1 周 ~ 学期最后有课的周）；
+            // 首页手势左右滑动不受此限制，仍可滑到学期外的 0/负周与未来周
+            val sliderMin = 1f
+            val sliderMax = maxOf(settings.totalWeeks, maxEntryWeek).toFloat()
+            var panelWeek by remember(selectedWeek) {
+                mutableStateOf(selectedWeek.coerceIn(1, maxOf(settings.totalWeeks, maxEntryWeek)).toFloat())
+            }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -487,7 +581,8 @@ fun TimetableScreen(
                 Text("周数", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = {
-                    scope.launch { pagerState.animateScrollToPage(currentWeek - 1) }
+                    scope.launch { pagerState.animateScrollToPage(rawCurrentWeek - minWeek) }
+                    Haptics.tick(context)
                     showWeekPicker = false
                 }) { Text("回到本周") }
             }
@@ -499,10 +594,11 @@ fun TimetableScreen(
                     value = panelWeek,
                     onValueChange = { panelWeek = it },
                     onValueChangeFinished = {
-                        scope.launch { pagerState.scrollToPage(panelWeek.toInt() - 1) }
+                        Haptics.tick(context)  // 周次落定轻震
+                        scope.launch { pagerState.animateScrollToPage(panelWeek.toInt() - minWeek) }
                     },
-                    valueRange = 1f..totalWeeks.toFloat(),
-                    steps = (totalWeeks - 2).coerceAtLeast(0),
+                    valueRange = sliderMin..sliderMax,
+                    steps = (maxOf(settings.totalWeeks, maxEntryWeek) - 2).coerceAtLeast(0),
                     modifier = Modifier.weight(1f),
                 )
                 Text(
@@ -548,6 +644,11 @@ fun TimetableScreen(
             }
         }
     }
+
+    // 首页网格中的考试块：点击弹考试详情（与考试安排页同一套弹窗）
+    examDetail?.let { e ->
+        com.buguake.timetable.campus.ui.ExamDetailDialog(e) { examDetail = null }
+    }
 }
 
 /** 课表切换卡片：迷你课表缩略图（异步渲染）+ 名称 + 选中勾。 */
@@ -586,32 +687,49 @@ private fun TimetableCard(
         }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // 选中态容器色平滑过渡
+        val containerColor by androidx.compose.animation.animateColorAsState(
+            targetValue = if (active) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+            animationSpec = AppMotion.effects(),
+            label = "ttCardBg",
+        )
         Box(
             Modifier
                 .size(width = 110.dp, height = 132.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (active) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerHigh
-                )
+                .background(containerColor)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            thumb?.let { bmp ->
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                )
+            // 缩略图异步渲染完成后交叉淡入，不再瞬现
+            androidx.compose.animation.Crossfade(
+                targetState = thumb,
+                animationSpec = AppMotion.effects(),
+                label = "ttThumb",
+            ) { bmp ->
+                bmp?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                }
             }
-            if (active) {
+            // 「使用中」勾选：弹性弹入
+            val checkScale = com.buguake.timetable.ui.theme.rememberPopScale(active)
+            if (active && checkScale > 0.01f) {
                 Icon(
                     Icons.Filled.Check,
                     contentDescription = "使用中",
                     tint = Color.White,
                     modifier = Modifier
                         .align(Alignment.Center)
+                        .graphicsLayer {
+                            scaleX = checkScale
+                            scaleY = checkScale
+                        }
                         .background(Color(0x66000000), RoundedCornerShape(50))
                         .padding(4.dp),
                 )
@@ -630,48 +748,75 @@ private fun TimetableCard(
 }
 
 @Composable
-private fun DayHeader(
+internal fun DayHeader(
     dayIndex: Int,
     date: LocalDate?,
     isToday: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    // 「今天」标识：圆圈弹入 + 文字颜色平滑过渡（翻页到今天所在周时有生命感）
+    val cs = MaterialTheme.colorScheme
+    val circleScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isToday) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.spring(
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+        ),
+        label = "todayCircle",
+    )
+    val weekdayColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isToday) cs.primary else cs.onSurfaceVariant,
+        animationSpec = AppMotion.effects(),
+        label = "todayWeekday",
+    )
+    val dayColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isToday) cs.onPrimary else cs.onSurfaceVariant,
+        animationSpec = AppMotion.effects(),
+        label = "todayDay",
+    )
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             WEEKDAY_NAMES[dayIndex - 1],
             style = MaterialTheme.typography.labelMedium,
-            color = if (isToday) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = weekdayColor,
         )
         Spacer(Modifier.height(2.dp))
-        Box(contentAlignment = Alignment.Center) {
-            if (isToday) {
+        // 固定 28dp 高度：圆圈只在内部缩放出现，行高恒定——
+        // 否则滑到含今天的周时表头行高突变，整个网格上下抖动
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.requiredSize(28.dp)) {
+            if (circleScale > 0.01f) {
                 Box(
                     Modifier
                         .size(28.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .graphicsLayer {
+                            scaleX = circleScale
+                            scaleY = circleScale
+                        }
+                        .background(cs.primary, CircleShape)
                 )
             }
             Text(
                 text = date?.dayOfMonth?.toString() ?: "",
                 fontSize = 13.sp,
                 fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                color = if (isToday) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = dayColor,
             )
         }
     }
 }
 
 @Composable
-private fun SectionAxis(
+internal fun SectionAxis(
     sections: IntRange,
     sectionTimes: List<SectionTime>,
     modifier: Modifier = Modifier,
+    // 考试周自动调整：被考试覆盖的节次行改显考试的真实时间区间（"HH:mm" to "HH:mm"）
+    overrideTimes: Map<Int, Pair<String, String>> = emptyMap(),
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         for (s in sections) {
             val t = sectionTimes.firstOrNull { it.section == s }
+            val ov = overrideTimes[s]
             Column(
                 modifier = Modifier.height(ROW_HEIGHT),
                 verticalArrangement = Arrangement.Center,
@@ -683,19 +828,46 @@ private fun SectionAxis(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                t?.let {
-                    Text(
-                        TimeUtils.hm(it.start),
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        TimeUtils.hm(it.end),
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                // 考试周自动调整：常规作息 ↔ 考试真实时间，文字交叉淡换
+                androidx.compose.animation.AnimatedContent(
+                    targetState = ov,
+                    transitionSpec = {
+                        (fadeIn(AppMotion.effectsFast()) togetherWith fadeOut(AppMotion.effectsFast()))
+                    },
+                    label = "axisTime",
+                ) { o ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        when {
+                            o != null -> {
+                                Text(
+                                    o.first,
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    o.second,
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            t != null -> {
+                                Text(
+                                    TimeUtils.hm(t.start),
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    TimeUtils.hm(t.end),
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -703,7 +875,7 @@ private fun SectionAxis(
 }
 
 @Composable
-private fun WeekGridPage(
+internal fun WeekGridPage(
     week: Int,
     allEntries: List<EntryWithCourse>,
     visibleDays: List<Int>,
@@ -718,6 +890,7 @@ private fun WeekGridPage(
     glass: Boolean,
     onCourseClick: (EntryWithCourse) -> Unit,
     onMoveEntry: (EntryWithCourse, Int, Int, Int, Int) -> Unit,
+    onAddAt: (day: Int, section: Int) -> Unit = { _, _ -> },  // 长按空白格添加课程
 ) {
     val density = LocalDensity.current
     val rowHeightPx = with(density) { ROW_HEIGHT.toPx() }
@@ -776,6 +949,16 @@ private fun WeekGridPage(
             .onGloballyPositioned {
                 gridCoords = it
                 gridSize = it.size
+            }
+            // 长按空白格：按落点换算星期与节次，交给上层打开添加课程（预填时间）
+            .pointerInput(visibleDays, maxSection) {
+                detectTapGestures(onLongPress = { offset ->
+                    if (visibleDays.isEmpty() || gridSize.width <= 0) return@detectTapGestures
+                    val colW = gridSize.width.toFloat() / visibleDays.size
+                    val dayIdx = (offset.x / colW).toInt().coerceIn(0, visibleDays.size - 1)
+                    val section = (offset.y / rowHeightPx).toInt().coerceIn(0, maxSection - 1)
+                    onAddAt(visibleDays[dayIdx], section + 1)
+                })
             }
     ) {
         Row(Modifier.fillMaxSize()) {
@@ -858,10 +1041,25 @@ private fun DragGhost(
         val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
         courseBlockColors(drag.entry.colorIndex, isDark)
     }
-    val topLeft = drag.ghostTopLeft()
+    // 幽灵块严格跟手（逐帧绝对替换）；仅出现时轻微弹入做质感
+    val target = drag.ghostTopLeft()
+    val appear = remember { androidx.compose.animation.core.Animatable(0.92f) }
+    LaunchedEffect(Unit) {
+        appear.animateTo(
+            1f,
+            androidx.compose.animation.core.spring(
+                stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            ),
+        )
+    }
     Box(
         Modifier
-            .absoluteOffset { IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()) }
+            .absoluteOffset { IntOffset(target.x.roundToInt(), target.y.roundToInt()) }
+            .graphicsLayer {
+                scaleX = appear.value
+                scaleY = appear.value
+            }
             .size(with(LocalDensity.current) { drag.widthPx.toDp() }, with(LocalDensity.current) { drag.heightPx.toDp() })
             .shadow(8.dp, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
             .background(container, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
@@ -1036,6 +1234,12 @@ private fun CourseBlock(
         scaleX = pressScale
         scaleY = pressScale
     }
+    // 拖拽中原块 / 非本周淡化：透明度平滑过渡
+    val blockAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isDragging) 0.25f else if (dimmed) 0.38f else 1f,
+        animationSpec = AppMotion.effects(),
+        label = "blockAlpha",
+    )
     // 拖拽落位回弹：仅拖拽落地的目标块弹入一次（0.92→1）
     val bounceScale = remember(entry.entryId) { androidx.compose.animation.core.Animatable(1f) }
     LaunchedEffect(bounce) {
@@ -1089,7 +1293,7 @@ private fun CourseBlock(
         val cs = MaterialTheme.colorScheme
         BoxWithConstraints(
             modifier = modifier
-                .alpha(if (isDragging) 0.25f else if (dimmed) 0.38f else 1f)
+                .alpha(blockAlpha)
                 .then(scaleModifier)
                 .then(dragModifier)
         ) {
@@ -1144,7 +1348,7 @@ private fun CourseBlock(
     BoxWithConstraints(
         modifier = modifier
             .padding(horizontal = 2.dp)
-            .alpha(if (isDragging) 0.25f else if (dimmed) 0.38f else 1f)
+            .alpha(blockAlpha)
             .then(scaleModifier)
             .then(dragModifier)
             .border(
@@ -1203,14 +1407,14 @@ private fun condensedLocation(e: EntryWithCourse): String {
     return listOf(buildingPart, e.room).filter { it.isNotBlank() }.joinToString("")
 }
 
-/** 当前时间红线（今日列）。 */
+/** 当前时间红线（今日列）：每分钟自动更新，位置平滑游走。 */
 @Composable
 private fun NowIndicator(
     sectionTimes: List<SectionTime>,
     maxSection: Int,
     modifier: Modifier = Modifier,
 ) {
-    val now = remember { LocalTime.now() }
+    val now = com.buguake.timetable.ui.theme.rememberNowMinute()
     val nowMinutes = now.hour * 60 + now.minute
     val first = sectionTimes.firstOrNull() ?: return
     val last = sectionTimes.lastOrNull() ?: return
@@ -1233,7 +1437,13 @@ private fun NowIndicator(
             break
         }
     }
-    val y = (yRatio.coerceIn(0f, maxSection.toFloat()) * ROW_HEIGHT.value).dp
+    // 分钟跳变时平滑游走，不再瞬移
+    val animatedRatio by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = yRatio.coerceIn(0f, maxSection.toFloat()),
+        animationSpec = AppMotion.spatialFast(),
+        label = "nowIndicatorY",
+    )
+    val y = (animatedRatio * ROW_HEIGHT.value).dp
     Box(
         modifier
             .fillMaxWidth()

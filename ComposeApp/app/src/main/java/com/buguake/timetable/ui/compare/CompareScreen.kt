@@ -131,7 +131,8 @@ fun CompareScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 104.dp),
         ) {
             Text(
                 "勾选要对比的课表（数据库课表按周计入；图片课表按截图占用计入）",

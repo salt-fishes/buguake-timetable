@@ -27,6 +27,58 @@ object CalendarExport {
         val remindMinutesBefore: Int = 0,
     )
 
+    /**
+     * 通用日历事件：考试等其他校园事件复用同一套转义/折行/时区逻辑，
+     * 避免在别处再写一份 RFC 5545 折行。
+     */
+    data class SimpleEvent(
+        val uid: String,
+        val start: LocalDateTime,
+        val end: LocalDateTime,
+        val summary: String,
+        val location: String? = null,
+        val description: String? = null,
+        /** >0 时生成 VALARM 提醒。 */
+        val remindMinutesBefore: Int = 0,
+    )
+
+    /** 由 [SimpleEvent] 生成完整 iCalendar 文本（考试安排导出用）。 */
+    fun buildSimpleIcs(
+        events: List<SimpleEvent>,
+        calendarName: String,
+        now: LocalDateTime = LocalDateTime.now(ZoneOffset.UTC),
+    ): String {
+        val sb = StringBuilder()
+        sb.append("BEGIN:VCALENDAR\r\n")
+        sb.append("VERSION:2.0\r\n")
+        sb.append("PRODID:-//jiankebiao//timetable 1.0//CN\r\n")
+        sb.append("CALSCALE:GREGORIAN\r\n")
+        line(sb, "X-WR-CALNAME", calendarName.ifBlank { "我的课表" })
+        appendVtimezone(sb)
+        val dtstamp = now.format(TS_FORMAT) + "Z"
+        for (e in events) {
+            sb.append("BEGIN:VEVENT\r\n")
+            line(sb, "UID", e.uid)
+            line(sb, "DTSTAMP", dtstamp)
+            line(sb, "DTSTART;TZID=Asia/Shanghai", e.start.format(TS_FORMAT))
+            val end = if (e.end.isAfter(e.start)) e.end else e.start.plusMinutes(30)
+            line(sb, "DTEND;TZID=Asia/Shanghai", end.format(TS_FORMAT))
+            line(sb, "SUMMARY", e.summary)
+            line(sb, "LOCATION", e.location)
+            line(sb, "DESCRIPTION", e.description)
+            if (e.remindMinutesBefore > 0) {
+                sb.append("BEGIN:VALARM\r\n")
+                sb.append("ACTION:DISPLAY\r\n")
+                line(sb, "TRIGGER", "-PT${e.remindMinutesBefore}M")
+                line(sb, "DESCRIPTION", e.summary)
+                sb.append("END:VALARM\r\n")
+            }
+            sb.append("END:VEVENT\r\n")
+        }
+        sb.append("END:VCALENDAR\r\n")
+        return sb.toString()
+    }
+
     /** 生成完整 iCalendar 文本。entries/sectionTimes/semesterStart 来自当前活动课表。 */
     fun buildIcs(
         entries: List<EntryWithCourse>,

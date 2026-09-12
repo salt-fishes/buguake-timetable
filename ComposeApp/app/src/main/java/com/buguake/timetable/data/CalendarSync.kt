@@ -10,21 +10,27 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * 课表 → 系统日历直接写入（CalendarProvider）。
+ * 课表/考试 → 系统日历直接写入（CalendarProvider）。
  *
  * 华为等国产日历 App 普遍没有 .ics 导入入口，因此同步不走文件，直接把事件
  * 写进系统日历数据库：用户打开日历 App 即见课程。
  *
  * 策略要点：
- * - 只写专属「不挂科课表」日历（找不到就创建 ACCOUNT_TYPE_LOCAL 本地账户日历），
- *   绝不碰用户其他日历——重复同步前按 CALENDAR_ID 清空旧事件，保证幂等且不误删；
- * - 事件展开逻辑与 CalendarExport.buildIcs 同源：逐周成独立事件（兼容性最好）；
+ * - 只写本应用专属日历（课程「不挂科课表」/ 考试「不挂科考试」，
+ *   找不到就创建 ACCOUNT_TYPE_LOCAL 本地账户日历），绝不碰用户其他日历；
+ * - 课程与考试分属两个日历：单独同步考试不会清掉已同步的课程，反之亦然；
+ * - 重复同步前按 CALENDAR_ID 清空该专属日历旧事件，保证幂等且不误删；
+ * - 课表事件展开逻辑与 CalendarExport.buildIcs 同源：逐周成独立事件（兼容性最好）；
  * - 需 READ/WRITE_CALENDAR 运行时权限（调用方负责申请）。
  */
 object CalendarSync {
 
     private const val ACCOUNT_NAME = "jiankebiao.local"
     private const val CAL_DISPLAY_NAME = "不挂科课表"
+
+    /** 考试专属日历名（校园本地化功能使用）。 */
+    const val CAL_EXAM_DISPLAY_NAME = "不挂科考试"
+
     private const val TZ_SH = "Asia/Shanghai"
     private val ZONE = ZoneId.of(TZ_SH)
 
@@ -83,12 +89,18 @@ object CalendarSync {
     }
 
     /**
-     * 写入系统日历：先清空「不挂科课表」日历旧事件再批量插入，返回写入条数。
+     * 写入系统日历：先清空目标专属日历的旧事件再批量插入，返回写入条数。
+     * [calendarName] 默认课程日历；考试传 [CAL_EXAM_DISPLAY_NAME]，两者互不干扰。
      * 失败抛出携带用户可读信息的异常（调用方展示 Snackbar）。
      */
-    fun sync(cr: ContentResolver, specs: List<EventSpec>, remindMinutesBefore: Int): Int {
-        val calId = resolveOrCreateCalendar(cr)
-        // 幂等：只清本应用专属日历，重复同步不产生重复课程，也不影响用户其他日历
+    fun sync(
+        cr: ContentResolver,
+        specs: List<EventSpec>,
+        remindMinutesBefore: Int,
+        calendarName: String = CAL_DISPLAY_NAME,
+    ): Int {
+        val calId = resolveOrCreateCalendar(cr, calendarName)
+        // 幂等：只清本应用专属日历，重复同步不产生重复事件，也不影响用户其他日历
         cr.delete(
             CalendarContract.Events.CONTENT_URI,
             "${CalendarContract.Events.CALENDAR_ID}=?",
@@ -127,10 +139,10 @@ object CalendarSync {
     }
 
     /**
-     * 找到（或创建）应用专属的「不挂科课表」日历。只认名字命中的日历，
+     * 找到（或创建）应用专属日历。只认名字命中的日历，
      * 避免写入用户私人日历后清空操作误删他人事件。
      */
-    private fun resolveOrCreateCalendar(cr: ContentResolver): Long {
+    private fun resolveOrCreateCalendar(cr: ContentResolver, calendarName: String): Long {
         cr.query(
             CalendarContract.Calendars.CONTENT_URI,
             arrayOf(
@@ -142,23 +154,23 @@ object CalendarSync {
             val idCol = c.getColumnIndexOrThrow(CalendarContract.Calendars._ID)
             val nameCol = c.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
             while (c.moveToNext()) {
-                if (c.getString(nameCol) == CAL_DISPLAY_NAME) return c.getLong(idCol)
+                if (c.getString(nameCol) == calendarName) return c.getLong(idCol)
             }
         }
-        return createLocalCalendar(cr)
+        return createLocalCalendar(cr, calendarName)
     }
 
     /**
-     * 清空本应用写入系统日历的全部课程事件（「不挂科课表」日历），返回移除条数。
+     * 清空本应用写入系统日历的事件（指定专属日历），返回移除条数。
      * 只动本应用的专属日历，绝不触碰用户其他日历；日历本身保留，可再次同步。
      */
-    fun clearSyncedEvents(cr: ContentResolver): Int {
+    fun clearSyncedEvents(cr: ContentResolver, calendarName: String = CAL_DISPLAY_NAME): Int {
         var calId = -1L
         cr.query(
             CalendarContract.Calendars.CONTENT_URI,
             arrayOf(CalendarContract.Calendars._ID),
             "${CalendarContract.Calendars.CALENDAR_DISPLAY_NAME}=? AND ${CalendarContract.Calendars.ACCOUNT_NAME}=?",
-            arrayOf(CAL_DISPLAY_NAME, ACCOUNT_NAME),
+            arrayOf(calendarName, ACCOUNT_NAME),
             null,
         )?.use { c ->
             if (c.moveToFirst()) calId = c.getLong(0)
@@ -172,7 +184,7 @@ object CalendarSync {
     }
 
     /** 创建 ACCOUNT_TYPE_LOCAL 本地账户日历（无需设备账号，华为/小米等主流 ROM 支持）。 */
-    private fun createLocalCalendar(cr: ContentResolver): Long = try {
+    private fun createLocalCalendar(cr: ContentResolver, calendarName: String): Long = try {
         val uri: Uri = CalendarContract.Calendars.CONTENT_URI.buildUpon()
             .appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER, "true")
             .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, ACCOUNT_NAME)
@@ -184,8 +196,8 @@ object CalendarSync {
                 ContentValues().apply {
                     put(CalendarContract.Calendars.ACCOUNT_NAME, ACCOUNT_NAME)
                     put(CalendarContract.Calendars.ACCOUNT_TYPE, CalendarContract.ACCOUNT_TYPE_LOCAL)
-                    put(CalendarContract.Calendars.NAME, CAL_DISPLAY_NAME)
-                    put(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, CAL_DISPLAY_NAME)
+                    put(CalendarContract.Calendars.NAME, calendarName)
+                    put(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, calendarName)
                     put(CalendarContract.Calendars.CALENDAR_COLOR, 0xFF585992.toInt())
                     put(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL, CalendarContract.Calendars.CAL_ACCESS_OWNER)
                     put(CalendarContract.Calendars.OWNER_ACCOUNT, ACCOUNT_NAME)
@@ -195,6 +207,6 @@ object CalendarSync {
             ) ?: throw IllegalStateException("系统拒绝了日历创建"),
         )
     } catch (e: Exception) {
-        throw IllegalStateException("无法创建「不挂科课表」日历（系统日历不可用），可改用 .ics 导出", e)
+        throw IllegalStateException("无法创建「$calendarName」日历（系统日历不可用），可改用 .ics 导出", e)
     }
 }

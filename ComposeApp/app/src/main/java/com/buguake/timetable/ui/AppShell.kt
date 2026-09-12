@@ -57,11 +57,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
@@ -149,9 +151,15 @@ private data class MoveReq(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     // 「长按应用图标 → 快速开锁」：切到校园页，由 CampusUnlockScreen 用默认门锁直接开门
     val quickUnlockSeq by com.buguake.timetable.campus.QuickUnlock.seq.collectAsState()
+    // 直达开门只消费一次：开门页处理完回传序号，之后（切页返回、重组）放行值归 0，不再重复开门；
+    // saveable 保证旋转/重建界面后也不会拿旧序号再开一次
+    var consumedUnlockSeq by rememberSaveable { mutableIntStateOf(0) }
+    val pendingUnlockSeq = if (quickUnlockSeq > consumedUnlockSeq) quickUnlockSeq else 0
     var selectedEntry by remember { mutableStateOf<EntryWithCourse?>(null) }
     var editingEntry by remember { mutableStateOf<EntryWithCourse?>(null) }
     var showAddCourse by rememberSaveable { mutableStateOf(false) }
+    // 长按网格空白添加：预填落点（星期 to 起始节），null = 顶栏加号进入
+    var addCoursePrefill by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var showSectionTimes by rememberSaveable { mutableStateOf(false) }
     var showReminders by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
@@ -202,7 +210,87 @@ private data class MoveReq(
         }
     }
 
-    // ---- 背景图导入（系统照片选择器 Photo Picker：零权限，旧版本自动回退 SAF） ----
+    // ---- 背景图导入（系统照片选择器 Photo Picker：零权限，旧版本自动回退 SAF）
+    //      选图后走系统原生裁剪（按屏幕比例），无系统裁剪组件时回退应用内裁剪 ----
+    var pendingCropSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // 裁剪结果（系统裁剪输出文件）→ 落盘为背景并刷新
+    suspend fun saveBackground(cropped: android.graphics.Bitmap) {
+        val oldPath = settings.customBgPath
+        runCatching {
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                val dst = File(context.filesDir, "bg_custom.jpg")
+                // 换图时清理旧背景文件（路径不同才删，避免误删刚写入的新图）
+                if (oldPath.isNotBlank() &&
+                    File(oldPath).absolutePath != dst.absolutePath
+                ) File(oldPath).delete()
+                dst.outputStream().use {
+                    cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it)
+                }
+                dst.absolutePath
+            }
+        }.onSuccess { path ->
+            settingsRepo.setCustomBgPath(path)
+            settingsRepo.setCustomBgEnabled(true)
+            AppRefresh.onDataChanged(context)  // 落盘后立即刷新（界面/小组件）
+            Haptics.click(context)
+            showSnackbar("背景已更新")
+        }.onFailure { e ->
+            showSnackbar("保存背景失败：${e.message ?: "未知错误"}")
+        }
+    }
+
+    // 系统原生裁剪（com.android.camera.action.CROP）：输入/输出都走应用自己的
+    // FileProvider 缓存文件（file_paths 已含 cache/share/），输出按屏幕比例
+    val cropLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            scope.launch {
+                runCatching {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        val outFile = File(context.cacheDir, "share/bg_crop_out.jpg")
+                        android.graphics.BitmapFactory.decodeFile(outFile.absolutePath)
+                            ?: error("裁剪结果为空")
+                    }
+                }.onSuccess { bmp -> saveBackground(bmp) }
+                    .onFailure { e -> showSnackbar("无法读取图片：${e.message ?: "未知错误"}") }
+            }
+        }
+    }
+
+    fun launchSystemCrop(src: android.graphics.Bitmap) {
+        val dm = context.resources.displayMetrics
+        val w = dm.widthPixels.coerceAtLeast(1)
+        val h = dm.heightPixels
+        val inFile = File(context.cacheDir, "share/bg_incoming.jpg")
+        val outFile = File(context.cacheDir, "share/bg_crop_out.jpg").apply { delete() }
+        val inUri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", inFile,
+        )
+        val outUri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", outFile,
+        )
+        val intent = android.content.Intent("com.android.camera.action.CROP").apply {
+            setDataAndType(inUri, "image/*")
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            putExtra("crop", "true")
+            putExtra("scale", true)
+            putExtra("aspectX", w)
+            putExtra("aspectY", h)
+            putExtra("outputX", 1080)
+            putExtra("outputY", (1080.0 * h / w).toInt())
+            putExtra("outputFormat", android.graphics.Bitmap.CompressFormat.JPEG.toString())
+            putExtra("return-data", false)
+            putExtra(android.provider.MediaStore.EXTRA_OUTPUT, outUri)
+        }
+        try {
+            cropLauncher.launch(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            pendingCropSource = src  // 系统无裁剪组件 → 应用内裁剪兜底
+        }
+    }
+
     val bgPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -210,19 +298,29 @@ private data class MoveReq(
             scope.launch {
                 runCatching {
                     kotlinx.coroutines.withContext(Dispatchers.IO) {
-                        val dst = File(context.filesDir, "bg_custom.jpg")
-                        importBackground(context.contentResolver, uri, dst)
-                        dst.absolutePath
+                        val bmp = decodeBackgroundBitmap(context.contentResolver, uri)
+                        // 先落缓存文件（系统裁剪的输入）；bitmap 同时留作应用内裁剪兜底
+                        val inFile = File(context.cacheDir, "share/bg_incoming.jpg")
+                        inFile.parentFile?.mkdirs()
+                        inFile.outputStream().use {
+                            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it)
+                        }
+                        bmp
                     }
-                }.onSuccess { path ->
-                    settingsRepo.setCustomBgPath(path)
-                    settingsRepo.setCustomBgEnabled(true)
-                    showSnackbar("背景已更新")
-                }.onFailure { e ->
-                    showSnackbar("无法读取图片：${e.message ?: "未知错误"}")
-                }
+                }.onSuccess { bmp -> launchSystemCrop(bmp) }
+                    .onFailure { e -> showSnackbar("无法读取图片：${e.message ?: "未知错误"}") }
             }
         }
+    }
+    pendingCropSource?.let { src ->
+        BackgroundCropDialog(
+            source = src,
+            onDismiss = { pendingCropSource = null },
+            onConfirm = { cropped ->
+                pendingCropSource = null
+                scope.launch { saveBackground(cropped) }
+            },
+        )
     }
 
     // ---- 课表对比：系统照片选择器 → 本地占用识别 → 人工校正 ----
@@ -557,10 +655,12 @@ private data class MoveReq(
                 LaunchedEffect(tab) {
                     pillSlot.animateTo(tab.toFloat(), AppMotion.spatialFast())
                 }
-                BoxWithConstraints(Modifier.fillMaxWidth().height(56.dp)) {
+                // 水平内缩 8dp：悬浮岛两端是圆弧，胶囊若顶到槽位边缘会被弧线切到、
+                // 看起来像溢出导航条；内缩后首尾槽位的胶囊也完全落在弧线以内
+                BoxWithConstraints(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp)) {
                     val slot = maxWidth / TAB_LABELS.size
                     val slotPx = with(LocalDensity.current) { slot.toPx() }
-                    val pillW = 64.dp
+                    val pillW = 48.dp
                     val pillInsetPx = with(LocalDensity.current) { ((slot - pillW) / 2).toPx() }
                     // 滑移胶囊：绘制在图标层【之下】，仅作视觉指示，不拦截点击；
                     // CenterStart 对齐后再做横向偏移，否则默认 TopStart 会顶到导航条上沿
@@ -575,7 +675,7 @@ private data class MoveReq(
                                 )
                             }
                             .width(pillW)
-                            .height(34.dp)
+                            .height(32.dp)
                             .clip(MaterialTheme.shapes.large)
                             .background(MaterialTheme.colorScheme.secondaryContainer),
                     )
@@ -610,6 +710,7 @@ private data class MoveReq(
                                         isDragging = true
                                         dragBase = pillSlot.value
                                         lastTickSlot = dragBase.roundToInt()
+                                        Haptics.tick(context)  // 拖动开始轻震
                                         scope.launch { pillSlot.stop() }
                                     },
                                     onDragEnd = { settleDrag() },
@@ -634,6 +735,13 @@ private data class MoveReq(
                                 animationSpec = AppMotion.spatial(),
                                 label = "tabScale$i",
                             )
+                            // 选中/未选颜色平滑过渡（不再瞬变）
+                            val tabTint by androidx.compose.animation.animateColorAsState(
+                                targetValue = if (tab == i) MaterialTheme.colorScheme.onSecondaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                animationSpec = AppMotion.effects(),
+                                label = "tabTint$i",
+                            )
                             Box(
                                 Modifier
                                     .width(slot)
@@ -655,8 +763,7 @@ private data class MoveReq(
                                         else -> Icons.Filled.Settings
                                     },
                                     contentDescription = label,
-                                    tint = if (tab == i) MaterialTheme.colorScheme.onSecondaryContainer
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = tabTint,
                                     modifier = Modifier
                                         .size(22.dp)
                                         .graphicsLayer {
@@ -670,17 +777,23 @@ private data class MoveReq(
                 }
             }
             if (glassOn) {
-                // 磨砂玻璃底栏：悬浮圆角矩形，四周留距；避让底部导航条
+                // 悬浮岛底栏：居中紧凑胶囊（参考主流课表应用的浮动岛）——
+                // 两侧留空、内容从岛下方穿过，投影 + 加重玻璃底做出"浮在页面上"的体感；
+                // 内部仍是同一套滑动胶囊 / 拖动换页 / 触感逻辑（固定 4×64dp 槽位）
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 14.dp)
-                        .padding(bottom = 10.dp, top = 2.dp)
+                        .padding(bottom = 12.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
+                    val barShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
                     com.buguake.timetable.ui.theme.GlassSurface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+                        modifier = Modifier
+                            .width(272.dp)
+                            .shadow(elevation = 16.dp, shape = barShape),
+                        shape = barShape,
+                        tintAlpha = if (com.buguake.timetable.ui.theme.isDarkTheme()) 0.72f else 0.56f,
                     ) { BottomBarRow() }
                 }
             } else {
@@ -712,7 +825,8 @@ private data class MoveReq(
                 }
             },
             label = "tabSwitch",
-            modifier = Modifier.padding(padding),
+            // 内容区不再避让底部悬浮岛：只保留顶部 padding，内容通到屏幕底、从岛下方穿过
+        modifier = Modifier.padding(top = padding.calculateTopPadding()),
         ) { page ->
             when (page) {
                 0 -> TimetableScreen(
@@ -722,7 +836,17 @@ private data class MoveReq(
                     onCourseClick = { selectedEntry = it },
                     onShowSnackbar = showSnackbar,
                     onImportClick = { showWebImport = true },
-                    onAddClick = { showAddCourse = true },
+                    onAddClick = {
+                        // 收起已打开的课程详情/编辑弹窗，避免两个面板叠放
+                        selectedEntry = null
+                        editingEntry = null
+                        showAddCourse = true
+                        addCoursePrefill = null
+                    },
+                    onAddAt = { day, sec ->
+                        addCoursePrefill = day to sec
+                        showAddCourse = true
+                    },
                     onMoveEntry = { entry, day, start, end, week ->
                         pendingMove = MoveReq(entry, day, start, end, week)
                     },
@@ -745,7 +869,8 @@ private data class MoveReq(
                 2 -> com.buguake.timetable.campus.ui.CampusScreen(
                     glass = glassOn,
                     showSnackbar = showSnackbar,
-                    openUnlockSeq = quickUnlockSeq,
+                    openUnlockSeq = pendingUnlockSeq,
+                    onUnlockConsumed = { consumedUnlockSeq = it },
                 )
                 else -> MineScreen(
                     settings = settings,
@@ -768,6 +893,8 @@ private data class MoveReq(
                     onSetShowNonCurrentWeek = { settingsRepo.setShowNonCurrentWeek(it) },
                     onSetShowTeacherOnBlock = { settingsRepo.setShowTeacherOnBlock(it) },
                     onSetShowLocationOnBlock = { settingsRepo.setShowLocationOnBlock(it) },
+                    onSetShowExamsOnHome = { settingsRepo.setShowExamsOnHome(it) },
+                    onSetMoveScope = { settingsRepo.setMoveScope(it) },
                     onSetDynamicColor = { settingsRepo.setDynamicColor(it) },
                     onSetDarkMode = { settingsRepo.setDarkMode(it) },
                     onOpenSectionTimes = { showSectionTimes = true },
@@ -822,7 +949,7 @@ private data class MoveReq(
         // 触摸拦截层已并入 OverlayPage（随进出场动画一同出现/消失）
 
     // ---- 课表管理页（全屏覆盖；玻璃模式下透出背景） ----
-    OverlayPage(showTimetableManage) {
+    OverlayPage(showTimetableManage, onBack = { showTimetableManage = false }) {
         com.buguake.timetable.ui.timetable.TimetableManagePage(
             timetables = timetableInfos,
             activeId = settings.timetableId,
@@ -894,7 +1021,7 @@ private data class MoveReq(
     }
 
     // ---- 小组件绑定页（全屏覆盖） ----
-    OverlayPage(showWidgetBind) {
+    OverlayPage(showWidgetBind, onBack = { showWidgetBind = false }) {
         val widgetInstances = remember(showWidgetBind, widgetBindRefresh) {
             queryWidgetInstances(context)
         }
@@ -924,7 +1051,42 @@ private data class MoveReq(
         )
     }
 
+    // 执行调课（固定范围与弹窗确认共用）：thisWeekOnly=true 仅本周，false 以后每周
+    val performMove: suspend (MoveReq, Boolean) -> Unit = { m, thisWeekOnly ->
+        val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+        runCatching {
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                scheduleRepo.moveEntryScoped(
+                    m.entry.entryId, m.day, m.start, m.end, m.week, thisWeekOnly,
+                )
+            }
+        }.onSuccess {
+            AppRefresh.onDataChanged(context)
+            Haptics.heavy(context)
+            showSnackbar(
+                if (thisWeekOnly) "已调整（仅第 ${m.week} 周）：${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节"
+                else "已调整（以后每周）：${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节"
+            )
+        }.onFailure {
+            // 协程被取消（如界面重组）不算调课失败，不打扰用户
+            if (it !is kotlinx.coroutines.CancellationException) {
+                showSnackbar("调整失败：${it.message ?: "未知错误"}")
+            }
+        }
+    }
+
     // ---- 调课范围确认：以后每周 / 仅本周 ----
+    // 设置里固定了范围时直接执行，不再每次弹窗询问（ask = 每次问）。
+    // 用 Unit key + snapshotFlow 监听：effect 内部要清空 pendingMove，
+    // 若把 pendingMove 当 key，置空时会重启 effect、取消正在执行的调课协程
+    LaunchedEffect(Unit) {
+        snapshotFlow { pendingMove }.collect { m ->
+            if (m != null && settings.moveScope != SettingsRepository.MOVE_SCOPE_ASK) {
+                pendingMove = null
+                performMove(m, settings.moveScope == SettingsRepository.MOVE_SCOPE_THIS_WEEK)
+            }
+        }
+    }
     pendingMove?.let { m ->
         val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
         androidx.compose.material3.AlertDialog(
@@ -936,38 +1098,14 @@ private data class MoveReq(
             confirmButton = {
                 TextButton(onClick = {
                     pendingMove = null
-                    scope.launch {
-                        runCatching {
-                            kotlinx.coroutines.withContext(Dispatchers.IO) {
-                                scheduleRepo.moveEntryScoped(
-                                    m.entry.entryId, m.day, m.start, m.end, m.week, false,
-                                )
-                            }
-                        }.onSuccess {
-                            AppRefresh.onDataChanged(context)
-                            Haptics.heavy(context)
-                            showSnackbar("已调整（以后每周）：${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节")
-                        }.onFailure { showSnackbar("调整失败：${it.message ?: "未知错误"}") }
-                    }
+                    scope.launch { performMove(m, false) }
                 }) { Text("以后每周") }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = {
                         pendingMove = null
-                        scope.launch {
-                            runCatching {
-                                kotlinx.coroutines.withContext(Dispatchers.IO) {
-                                    scheduleRepo.moveEntryScoped(
-                                        m.entry.entryId, m.day, m.start, m.end, m.week, true,
-                                    )
-                                }
-                            }.onSuccess {
-                                AppRefresh.onDataChanged(context)
-                                Haptics.heavy(context)
-                                showSnackbar("已调整（仅第 ${m.week} 周）：${dayNames[m.day - 1]} 第 ${m.start}-${m.end} 节")
-                            }.onFailure { showSnackbar("调整失败：${it.message ?: "未知错误"}") }
-                        }
+                        scope.launch { performMove(m, true) }
                     }) { Text("仅本周") }
                     TextButton(onClick = { pendingMove = null }) { Text("取消") }
                 }
@@ -1022,10 +1160,27 @@ private data class MoveReq(
     }
 
     // ---- 作息时间独立页（全屏覆盖，含系统返回键处理；玻璃模式下透出背景） ----
-    OverlayPage(showSectionTimes) {
+    // 预设列表：保存当前作息 / 快捷切换 / 删除
+    var sectionPresets by remember { mutableStateOf(settingsRepo.sectionPresets()) }
+    OverlayPage(showSectionTimes, onBack = { showSectionTimes = false }) {
         com.buguake.timetable.ui.mine.SectionTimePage(
             settings = settings,
             glass = glassOn,
+            presets = sectionPresets,
+            onSavePreset = { name ->
+                scope.launch {
+                    settingsRepo.saveSectionPreset(
+                        name,
+                        com.buguake.timetable.data.SettingsRepository.encodeSections(settings.sectionTimes),
+                    )
+                    sectionPresets = settingsRepo.sectionPresets()
+                }
+                showSnackbar("已保存作息预设「$name」")
+            },
+            onDeletePreset = { name ->
+                settingsRepo.deleteSectionPreset(name)
+                sectionPresets = settingsRepo.sectionPresets()
+            },
             onSetSectionTimes = {
                 scope.launch {
                     settingsRepo.setSectionTimes(it)
@@ -1043,7 +1198,7 @@ private data class MoveReq(
     }
 
     // ---- 课程提醒独立页（权限引导 / 运行诊断 / 提前量 / 测试） ----
-    OverlayPage(showReminders) {
+    OverlayPage(showReminders, onBack = { showReminders = false }) {
         com.buguake.timetable.ui.mine.ReminderPage(
             settings = settings,
             glass = glassOn,
@@ -1070,7 +1225,7 @@ private data class MoveReq(
     }
 
     // ---- 教务网页导入（全屏覆盖：学校 → 适配器 → WebView） ----
-    OverlayPage(showWebImport) {
+    OverlayPage(showWebImport, onBack = { showWebImport = false }) {
         WebImportFlow(
             timetables = timetableInfos,
             defaultStartMillis = settings.semesterStart,
@@ -1081,14 +1236,14 @@ private data class MoveReq(
     }
 
     // ---- 关于页 / 隐私政策页（全屏覆盖；玻璃模式下透出背景） ----
-    OverlayPage(showAbout) {
+    OverlayPage(showAbout, onBack = { showAbout = false }) {
             com.buguake.timetable.ui.mine.AboutPage(
                 versionName = com.buguake.timetable.BuildConfig.VERSION_NAME,
             onBack = { showAbout = false },
         )
     }
         // ---- 课表对比（实验性）：数据库课表 + 图片对比课表 → 共同空闲 ----
-        OverlayPage(showCompare) {
+        OverlayPage(showCompare, onBack = { showCompare = false }) {
             androidx.compose.runtime.LaunchedEffect(showCompare) {
                 if (showCompare) compareTimetables = CompareRepository.load(context)
             }
@@ -1123,9 +1278,23 @@ private data class MoveReq(
                 },
                 onBack = { showCompare = false },
             )
-            pendingOccupancy?.let { det ->
-                OccupancyReviewScreen(
-                    detection = det,
+            // ---- 截图识别校正（三级页）：与全部二/三级页统一进出场 + 侧滑返回 ----
+            // 退场动画期间 pendingOccupancy 已置空，用 reviewLast 保留内容渲染最后一帧
+            val reviewOpen = pendingOccupancy != null
+            val reviewLast = remember { mutableStateOf<OccupancyDetection?>(null) }
+            if (reviewOpen) reviewLast.value = pendingOccupancy
+            androidx.compose.animation.AnimatedVisibility(
+                visible = reviewOpen,
+                enter = com.buguake.timetable.ui.theme.pageEnterCloser(),
+                exit = com.buguake.timetable.ui.theme.pageExitCloser(),
+            ) {
+                reviewLast.value?.let { det ->
+                    com.buguake.timetable.ui.theme.SwipeBackBox(
+                        onBack = { pendingOccupancy = null },
+                        enabled = true,
+                    ) {
+                        OccupancyReviewScreen(
+                            detection = det,
                     glass = glassOn,
                     onSave = { name, dayCount, blocks ->
                         pendingOccupancy = null
@@ -1141,12 +1310,14 @@ private data class MoveReq(
                             showSnackbar("已添加对比课表「" + name + "」")
                         }
                     },
-                    onCancel = { pendingOccupancy = null },
-                )
+                        onCancel = { pendingOccupancy = null },
+                        )
+                    }
+                }
             }
         }
 
-    OverlayPage(showPrivacy) {
+    OverlayPage(showPrivacy, onBack = { showPrivacy = false }) {
         com.buguake.timetable.ui.mine.PrivacyPage(
             onBack = { showPrivacy = false },
         )
@@ -1222,6 +1393,8 @@ private data class MoveReq(
             .coerceIn(1, settings.totalWeeks)
         com.buguake.timetable.ui.timetable.AddCourseSheet(
             maxWeek = maxWeek,
+            prefillDay = addCoursePrefill?.first,
+            prefillSection = addCoursePrefill?.second,
             onSave = { name, teacher, location, day, s, e, weeks ->
                 scope.launch {
                     runCatching {
@@ -1242,8 +1415,9 @@ private data class MoveReq(
                     }
                 }
                 showAddCourse = false
+                addCoursePrefill = null
             },
-            onDismiss = { showAddCourse = false },
+            onDismiss = { showAddCourse = false; addCoursePrefill = null },
         )
     }
     }
@@ -1255,14 +1429,12 @@ private data class MoveReq(
  * 拦截层随动画一同出现/消失，退场期间也不会漏点。
  */
 @Composable
-private fun OverlayPage(visible: Boolean, content: @Composable () -> Unit) {
+private fun OverlayPage(visible: Boolean, onBack: (() -> Unit)? = null, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(AppMotion.effects()) +
-            scaleIn(AppMotion.spatialFast(), initialScale = 0.96f) +
-            slideInVertically(AppMotion.spatialFast()) { it / 16 },
-        exit = fadeOut(AppMotion.effectsFast()) +
-            slideOutVertically(AppMotion.spatialFast()) { it / 16 },
+        // 统一转场：深度缩放 + 淡切（进入迎面放大、退出缩回淡出，与各二/三级页一致）
+        enter = com.buguake.timetable.ui.theme.pageEnterCloser(),
+        exit = com.buguake.timetable.ui.theme.pageExitCloser(),
     ) {
         Box(Modifier.fillMaxSize()) {
             // 拦截层必须垫在内容【下方】（兄弟节点而非父布局）：
@@ -1282,21 +1454,26 @@ private fun OverlayPage(visible: Boolean, content: @Composable () -> Unit) {
                         }
                     }
             )
-            content()
+            com.buguake.timetable.ui.theme.SwipeBackBox(
+                onBack = { onBack?.invoke() },
+                enabled = visible && onBack != null,
+            ) {
+                content()
+            }
         }
     }
 }
 
-/** 枚举桌面上的不挂科课表小组件实例（2×4 / 2×3 / 2×2）。 */
+/** 枚举桌面上的不挂科课表小组件实例（4×2 / 3×2 / 2×2）。 */
 private fun queryWidgetInstances(context: Context): List<com.buguake.timetable.ui.timetable.WidgetInstanceInfo> {
     val mgr = android.appwidget.AppWidgetManager.getInstance(context)
     val large = android.content.ComponentName(context, ScheduleWidgetProvider::class.java)
     val medium = android.content.ComponentName(context, ScheduleWidgetMediumProvider::class.java)
     val compact = android.content.ComponentName(context, ScheduleWidgetCompactProvider::class.java)
     return mgr.getAppWidgetIds(large).map {
-        com.buguake.timetable.ui.timetable.WidgetInstanceInfo(it, compact = false, sizeLabel = "2×4 列表")
+        com.buguake.timetable.ui.timetable.WidgetInstanceInfo(it, compact = false, sizeLabel = "4×2 今明双栏")
     } + mgr.getAppWidgetIds(medium).map {
-        com.buguake.timetable.ui.timetable.WidgetInstanceInfo(it, compact = false, sizeLabel = "2×3 列表")
+        com.buguake.timetable.ui.timetable.WidgetInstanceInfo(it, compact = false, sizeLabel = "3×2 列表")
     } + mgr.getAppWidgetIds(compact).map {
         com.buguake.timetable.ui.timetable.WidgetInstanceInfo(it, compact = true, sizeLabel = "2×2 紧凑")
     }
@@ -1320,24 +1497,23 @@ private fun defaultSettings(): ScheduleSettings =
         customBgEnabled = true,
         customBgPath = "",
         customBgBlurDp = com.buguake.timetable.data.SettingsRepository.CUSTOM_BG_BLUR_DEFAULT,
+        showExamsOnHome = true,
+        moveScope = com.buguake.timetable.data.SettingsRepository.MOVE_SCOPE_ASK,
 )
 
-/** 背景图导入：两次解码（先边界后位图）降采样至 ≤2048px，JPEG 存私有目录。 */
-private fun importBackground(
+/** 背景图解码：两次解码（先边界后位图）降采样至 ≤2048px，交给裁剪后再落盘。 */
+private fun decodeBackgroundBitmap(
     cr: android.content.ContentResolver,
     uri: android.net.Uri,
-    dst: File,
-) {
+): android.graphics.Bitmap {
     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
     cr.openInputStream(uri)!!.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
     var sample = 1
     while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2048) sample *= 2
-    val bmp = cr.openInputStream(uri)!!.use {
+    return cr.openInputStream(uri)!!.use {
         android.graphics.BitmapFactory.decodeStream(
             it, null,
             android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
         )
     } ?: throw IllegalStateException("无法解码图片")
-    dst.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }
-    bmp.recycle()
 }

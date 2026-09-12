@@ -14,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -49,6 +51,8 @@ fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.large,
     level: GlassLevel = GlassLevel.Glass,
+    /** 覆盖等级着色强度（0..1）：底栏等需要更强"悬浮体感"的表面用。 */
+    tintAlpha: Float? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -59,7 +63,7 @@ fun GlassSurface(
     Box(
         modifier
             .clip(shape)
-            .background(cs.surface.copy(alpha = level.tintAlpha))
+            .background(cs.surface.copy(alpha = tintAlpha ?: level.tintAlpha))
             .border(
                 width = 1.dp,
                 brush = Brush.linearGradient(listOf(borderColor, borderColorSoft)),
@@ -125,20 +129,40 @@ fun CustomBackgroundLayer(
                 Box(Modifier.matchParentSize().background(cs.surface.copy(alpha = scrimAlpha)))
             }
         } else {
-            // 内置品牌渐变：顶部 primaryContainer 微光 → surfaceBright → surfaceDim。
-            // 颜色全部取自当前色系，亮/暗模式对比度都由色系保证。
+            // 内置品牌渐变：底部明暗纵向过渡 + 多路「边缘光」径向高光。
+            // 光源分布刻意不均匀（左上主光最强，右上/底部渐弱），
+            // 每路光用带缓 stopping 的径向渐变做曲线衰减，避免线性渐变的均匀感。
             Box(
                 Modifier
                     .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                cs.primaryContainer.copy(alpha = 0.30f),
-                                cs.surfaceBright,
-                                cs.surfaceDim,
+                    .drawBehind {
+                        val w = size.width
+                        val h = size.height
+                        val r = maxOf(w, h)
+                        drawRect(
+                            Brush.verticalGradient(
+                                listOf(cs.surfaceBright, cs.surfaceDim)
                             )
                         )
-                    )
+                        // (中心, 半径, 颜色, 峰值强度)：径向曲线衰减 = 1 → 0.45 → 0.14 → 0
+                        fun glow(cx: Float, cy: Float, radius: Float, color: Color, peak: Float) {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    0f to color.copy(alpha = peak),
+                                    0.25f to color.copy(alpha = peak * 0.45f),
+                                    0.55f to color.copy(alpha = peak * 0.14f),
+                                    1f to Color.Transparent,
+                                    center = Offset(cx, cy),
+                                    radius = radius,
+                                ),
+                                radius = radius,
+                                center = Offset(cx, cy),
+                            )
+                        }
+                        glow(w * 0.06f, h * 0.00f, r * 0.95f, cs.primaryContainer, 0.42f)   // 左上主光
+                        glow(w * 0.96f, h * 0.10f, r * 0.70f, cs.secondaryContainer, 0.26f) // 右上次光
+                        glow(w * 0.42f, h * 1.06f, r * 0.85f, cs.tertiaryContainer, 0.16f)  // 底部弱光
+                    }
             )
         }
         content()

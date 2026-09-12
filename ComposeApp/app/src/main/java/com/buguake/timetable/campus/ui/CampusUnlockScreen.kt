@@ -509,6 +509,41 @@ fun CampusUnlockScreen(
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                     }
 
+                    // 首次开锁学习提示：显著提示卡，避免把首次的扫描耗时当成故障
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            Icon(
+                                Icons.Filled.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "首次开锁需要学习门锁地址",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    "第一次开门会先扫描并学习门锁的 MAC 地址（稍慢），" +
+                                        "学习完成后再次开锁直接连接、速度更快；每个门锁只需学习一次。",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                        }
+                    }
+
                     // 门锁列表（默认门锁置顶，点按即开门）
                     saved?.orderedLocks.orEmpty().forEach { lock ->
                         UnlockLockTile(

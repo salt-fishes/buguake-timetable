@@ -13,7 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import com.buguake.timetable.data.UpdateChecker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 关于页：正文（功能、更新记录、开发者、兼容性）由 `assets/html/about.html` 渲染并已精简。
@@ -61,8 +63,13 @@ fun AboutPage(
         onBridgeMessage = { message ->
             if (message == "checkUpdate" && !checkingUpdate) {
                 checkingUpdate = true
+                // 检查更新有阻塞网络请求（OkHttp execute），必须切到 IO 线程——
+                // 主线程发起网络会被系统直接抛 NetworkOnMainThreadException，
+                // 表现为「一点检查更新就立刻失败」
                 scope.launch {
-                    updateResult = runCatching { UpdateChecker.check(versionName) }.fold(
+                    updateResult = withContext(Dispatchers.IO) {
+                        runCatching { UpdateChecker.check(versionName) }
+                    }.fold(
                         onSuccess = { info ->
                             if (info == null) {
                                 UpdateResult(

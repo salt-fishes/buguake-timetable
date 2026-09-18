@@ -3,6 +3,7 @@ package com.buguake.timetable.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
@@ -89,5 +90,27 @@ val CampusIcon: ImageVector by lazy {
             verticalLineToRelative(3.72f)
             close()
         }
+    }.build()
+}
+
+/** 洗衣机图标（Material local_laundry_service 几何，Apache 2.0；core 图标集不含，本地自绘）。 */
+val LaundryIcon: ImageVector by lazy {
+    // Material Symbols "local_laundry_service"（filled）官方路径，Apache 2.0
+    val body = "M9.17,16.83c1.56,1.56 4.1,1.56 5.66,0c1.56,-1.56 1.56,-4.1 0,-5.66L9.17,16.83z" +
+        "M20,2.01L4,2v20h16V2.01zM11.5,5c0.55,0 1,0.45 1,1s-0.45,1 -1,1s-1,-0.45 -1,-1" +
+        "S10.95,5 11.5,5zM8,5c0.55,0 1,0.45 1,1S8.55,7 8,7S7,6.55 7,6S7.45,5 8,5z" +
+        "M6,16.54V19h12v-2.46c-1.83,0.52 -2.4,2.46 -6,2.46S7.83,17.06 6,16.54z"
+    ImageVector.Builder(
+        name = "LaundryIcon",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        addPath(
+            pathData = PathParser().parsePathString(body).toNodes(),
+            fill = SolidColor(Color.Black),
+            fillAlpha = 1f,
+        )
     }.build()
 }

@@ -57,6 +57,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
+            <!-- 洗衣房小组件 / 长按快捷方式的解析目标：直达洗衣房（楼栋由本地缓存带出） -->
+            <intent-filter>
+                <action android:name="com.buguake.timetable.campus.LAUNDRY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />

@@ -24,10 +24,13 @@ import androidx.compose.ui.unit.dp
 import com.buguake.timetable.campus.laundry.DeviceStatus
 import com.buguake.timetable.campus.laundry.LaundryDevice
 import com.buguake.timetable.campus.laundry.LaundryHouse
+import com.buguake.timetable.campus.laundry.LaundryStoreInfo
+import com.buguake.timetable.campus.laundry.LaundryWidgetData
+import com.buguake.timetable.campus.laundry.LaundryWidgetRow
 import com.buguake.timetable.campus.laundry.LaundryJump
 import com.buguake.timetable.campus.laundry.LaundryStore
-import com.buguake.timetable.campus.laundry.LaundryStoreInfo
 import com.buguake.timetable.campus.laundry.ShunshuiClient
+import com.buguake.timetable.widget.LaundryWidgetProvider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -127,13 +130,30 @@ fun LaundryHome(
                 }
                 val houses = info?.houses.orEmpty()
                 if (houses.isEmpty() && !loading) {
-                    EmptyHint(
-                        loadError ?: "该门店暂无楼栋信息，试试换一家门店",
-                        actionLabel = "换门店",
-                    ) { onPickStore() }
+                    if (loadError == null) {
+                        // 无楼栋门店（实测如含辉苑，house 为空数组）：以门店整体作为"虚拟楼栋"直取设备
+                        // （/wash/device/list 用 house_id=0，已实测可用）
+                        LazyColumn(
+                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            item {
+                                HouseCard(LaundryHouse(0, "全部设备", true, 0), highlighted = false) {
+                                    onOpenHouse(
+                                        LaundryHouse(0, default.name, true, 0),
+                                        LaundryStoreInfo(default.id, info?.categories.orEmpty(), emptyList()),
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        EmptyHint(loadError ?: "该门店暂无楼栋信息，试试换一家门店", actionLabel = "换门店") {
+                            onPickStore()
+                        }
+                    }
                 } else {
                     LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(houses, key = { it.id }) { h ->
@@ -149,7 +169,7 @@ fun LaundryHome(
     }
 }
 
-/** 楼栋卡片：楼栋名 / 登记设备数 / 在线或停用。 */
+/** 楼栋卡片：楼栋名 / 登记设备数 / 在线或停用；上次选择的楼栋高亮并带角标。 */
 @Composable
 private fun HouseCard(h: LaundryHouse, highlighted: Boolean, onClick: () -> Unit) {
     Card(
@@ -161,13 +181,34 @@ private fun HouseCard(h: LaundryHouse, highlighted: Boolean, onClick: () -> Unit
         ),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text(h.name, style = MaterialTheme.typography.titleSmall)
-            Text(
-                "${h.count} 台" + if (h.onlineUse) "" else " · 已停用",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(h.name, style = MaterialTheme.typography.titleSmall)
+                    if (highlighted) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        ) {
+                            Text(
+                                "上次",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "${h.count} 台" + if (h.onlineUse) "" else " · 已停用",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -220,12 +261,24 @@ fun LaundryDevices(
 
     val currentCategory = categories.getOrNull(selected) ?: categories.firstOrNull()
 
+    /** 把当前内存中的各分类空闲数写入 2×2 小组件数据并刷新桌面上已添加的实例。 */
+    fun refreshWidget() {
+        val rows = categories.mapNotNull { cat ->
+            val list = devices[cat.id] ?: return@mapNotNull null
+            LaundryWidgetRow(cat.name, list.count { it.status == DeviceStatus.IDLE && it.online }, list.size)
+        }
+        if (rows.isEmpty()) return
+        store.saveWidgetSnapshot(LaundryWidgetData(house.name, System.currentTimeMillis(), rows))
+        LaundryWidgetProvider.updateAll(context)
+    }
+
     suspend fun fetchCategory(catId: Int) {
         runCatching { client.pagedDevices(info.storeId, house.id, catId) }
             .onSuccess { list ->
                 devices[catId] = list
                 fetchAtMs[catId] = System.currentTimeMillis()
                 store.saveSnapshot(info.storeId, house.id, list)
+                refreshWidget()
             }
             .onFailure { showSnackbar(it.message ?: "网络请求失败") }
     }
@@ -245,10 +298,10 @@ fun LaundryDevices(
         loading = false
     }
 
-    // 15s 轮询：只重拉当前选中分类
+    // 60s 校准轮询：倒计时本地每秒自减，每分钟向服务端校准一次（只重拉当前选中分类）
     LaunchedEffect(house.id, selected) {
         while (isActive) {
-            delay(15_000)
+            delay(60_000)
             currentCategory?.let { fetchCategory(it.id) }
         }
     }
@@ -300,6 +353,17 @@ fun LaundryDevices(
 
         val list = currentCategory?.let { devices[it.id] }.orEmpty()
         val idleCount = list.count { it.status == DeviceStatus.IDLE && it.online }
+        // 空闲的排前面，其次按剩余时间；离线/未知置底
+        val sorted = list.sortedWith(
+            compareBy<LaundryDevice> {
+                when {
+                    !it.online -> 3
+                    it.status == DeviceStatus.IDLE -> 0
+                    it.status == DeviceStatus.RUNNING -> 1
+                    else -> 2
+                }
+            }.thenBy { it.remainSeconds },
+        )
 
         if (loading && list.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -325,12 +389,14 @@ fun LaundryDevices(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(list, key = { it.id }) { d ->
-                    DeviceCard(d, nowMs = fetchAtMs[d.categoryId] ?: 0L, tick = tick) {
+                items(sorted, key = { it.id }) { d ->
+                    // tick 作为参数传入保证每秒重组：倒计时本地流逝，每 60s 向服务端校准
+                    val remain = remainNow(d, fetchAtMs[d.categoryId] ?: 0L, tick)
+                    DeviceCard(d, remainSec = remain) {
                         val opened = LaundryJump.openInMiniProgram(context, d.actionCode)
                         if (!opened) showSnackbar("跳转失败，链接已复制，可在微信内打开")
                     }
@@ -340,12 +406,15 @@ fun LaundryDevices(
     }
 }
 
+/** 剩余秒数 = 抓取时的剩余 − 已流逝（tick 仅用于让调用方每秒重算）。 */
+private fun remainNow(d: LaundryDevice, nowMs: Long, tick: Int): Int {
+    val elapsed = if (nowMs > 0) ((System.currentTimeMillis() - nowMs) / 1000).toInt() else 0
+    return (d.remainSeconds - elapsed).coerceAtLeast(0)
+}
+
 /** 设备卡片：名称 / 状态 / 剩余时间 / 去开洗。 */
 @Composable
-private fun DeviceCard(d: LaundryDevice, nowMs: Long, tick: Int, onWash: () -> Unit) {
-    // 本地倒计时：抓取时的剩余秒 − 已流逝秒（tick 仅触发重组）
-    val elapsedSec = if (nowMs > 0) ((System.currentTimeMillis() - nowMs) / 1000).toInt() else 0
-    val remain = (d.remainSeconds - elapsedSec).coerceAtLeast(0)
+private fun DeviceCard(d: LaundryDevice, remainSec: Int, onWash: () -> Unit) {
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
@@ -367,7 +436,7 @@ private fun DeviceCard(d: LaundryDevice, nowMs: Long, tick: Int, onWash: () -> U
                 when {
                     !d.online -> "离线"
                     d.status == DeviceStatus.IDLE -> "空闲"
-                    d.status == DeviceStatus.RUNNING -> "剩余 ${formatRemain(remain)}"
+                    d.status == DeviceStatus.RUNNING -> "剩余 ${formatRemain(remainSec)}"
                     d.status == DeviceStatus.PROTECTING -> "保护中"
                     else -> "未知"
                 },

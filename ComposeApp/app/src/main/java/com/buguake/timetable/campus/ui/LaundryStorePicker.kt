@@ -195,7 +195,7 @@ fun LaundryStorePicker(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (recent.isNotEmpty()) {

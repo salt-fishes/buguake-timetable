@@ -6,6 +6,8 @@
     <string name="widget_description">今日课程一览</string>
     <string name="widget_description_compact">今日课程速览</string>
     <string name="widget_description_medium">今日课程列表</string>
+    <string name="laundry_widget_default_title">洗衣房</string>
+    <string name="laundry_widget_description">空闲洗衣机/烘干机速览</string>
     <string name="shortcut_unlock_short">快速开锁</string>
     <string name="shortcut_unlock_long">快速开锁（宿舍门）</string>
 </resources>

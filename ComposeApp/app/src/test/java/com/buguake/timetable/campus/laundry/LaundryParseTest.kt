@@ -170,6 +170,20 @@ class LaundryParseTest {
     }
 
     @Test
+    fun parseHouseArrayForm() {
+        // 实测（含辉苑 48）：house 直接是数组；空数组代表无楼栋 → UI 层以虚拟楼栋 house_id=0 直取设备
+        val body = """{"status":200,"data":{"info":{"category":[{"id":1,"name":"洗衣机"}],"house":""" +
+            """[{"id":7,"house_name":"1号楼","onlineUse":1,"count":3}]}}}"""
+        val info = ShunshuiClient.parseStoreInfo(body, 48)
+        assertEquals(1, info.houses.size)
+        assertEquals("1号楼", info.houses[0].name)
+        val empty = ShunshuiClient.parseStoreInfo(
+            """{"status":200,"data":{"info":{"category":[],"house":[]}}}""", 48,
+        )
+        assertTrue(empty.houses.isEmpty())
+    }
+
+    @Test
     fun storeInfoBusinessErrorThrows() {
         val body = """{"status":500,"message":"门店不存在"}"""
         try {

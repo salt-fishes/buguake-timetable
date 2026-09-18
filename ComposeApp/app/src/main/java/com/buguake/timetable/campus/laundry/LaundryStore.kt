@@ -4,6 +4,16 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** 2×2 洗衣房小组件的一行：分类名 + 空闲数 + 总数。 */
+data class LaundryWidgetRow(val name: String, val idle: Int, val total: Int)
+
+/** 2×2 洗衣房小组件数据：上次浏览的楼栋与各分类空闲数（App 内刷新时写入）。 */
+data class LaundryWidgetData(
+    val houseName: String,
+    val updatedAt: Long,
+    val rows: List<LaundryWidgetRow>,
+)
+
 /**
  * 洗衣房本地存储（SharedPreferences，**非敏感**：无账号、无 token、无定位轨迹）。
  *
@@ -156,6 +166,37 @@ class LaundryStore private constructor(context: Context) {
         return devices to o.optLong("at", 0L)
     }
 
+    // ---- 2×2 小组件数据（App 内每次刷新设备后写入）----
+
+    fun saveWidgetSnapshot(data: LaundryWidgetData) {
+        val rows = JSONArray()
+        data.rows.forEach {
+            rows.put(JSONObject().put("name", it.name).put("idle", it.idle).put("total", it.total))
+        }
+        prefs.edit().putString(
+            K_WIDGET,
+            JSONObject()
+                .put("houseName", data.houseName)
+                .put("at", data.updatedAt)
+                .put("rows", rows)
+                .toString(),
+        ).apply()
+    }
+
+    fun loadWidgetSnapshot(): LaundryWidgetData? {
+        val o = prefs.getString(K_WIDGET, null)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return null
+        val rows = o.optJSONArray("rows")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                runCatching {
+                    val r = arr.getJSONObject(i)
+                    LaundryWidgetRow(r.getString("name"), r.optInt("idle"), r.optInt("total"))
+                }.getOrNull()
+            }
+        } ?: return null
+        return LaundryWidgetData(o.optString("houseName"), o.optLong("at", 0L), rows)
+    }
+
     // ---- 编解码 ----
 
     private fun encodeRecent(items: List<LaundryStoreItem>): JSONArray {
@@ -179,6 +220,7 @@ class LaundryStore private constructor(context: Context) {
         private const val K_STORE_INFO = "store_info_"
         private const val K_LAST_HOUSE = "last_house_"
         private const val K_SNAPSHOT = "snapshot_"
+        private const val K_WIDGET = "widget_snapshot"
         private const val MAX_RECENT = 3
 
         @Volatile private var INSTANCE: LaundryStore? = null

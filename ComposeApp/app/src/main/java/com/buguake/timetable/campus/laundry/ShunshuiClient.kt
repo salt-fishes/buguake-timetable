@@ -116,10 +116,18 @@ class ShunshuiClient(
                     }
                 }
             } ?: emptyList()
-            val houseDict = info.optJSONObject("house") ?: root.optJSONObject("house")
             val houses = mutableListOf<LaundryHouse>()
-            houseDict?.keys()?.forEach { key ->
-                flattenHouse(houseDict.optJSONObject(key), houses)
+            val houseDict = info.optJSONObject("house") ?: root.optJSONObject("house")
+            if (houseDict != null) {
+                // 常规形态：key 为 house_id 字符串的对象字典
+                houseDict.keys().forEach { key ->
+                    flattenHouse(houseDict.optJSONObject(key), houses)
+                }
+            } else {
+                // 兼容形态：house 直接是楼栋对象数组（部分门店返回空数组，如含辉苑）
+                (info.optJSONArray("house") ?: root.optJSONArray("house"))?.let { arr ->
+                    (0 until arr.length()).forEach { i -> flattenHouse(arr.optJSONObject(i), houses) }
+                }
             }
             return LaundryStoreInfo(storeId, categories, houses)
         }

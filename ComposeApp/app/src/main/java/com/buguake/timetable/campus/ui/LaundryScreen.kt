@@ -51,6 +51,8 @@ fun LaundryHome(
     onPickStore: () -> Unit,
     onOpenHouse: (LaundryHouse, LaundryStoreInfo) -> Unit,
     onBack: () -> Unit,
+    /** 每次详情加载结束回传最终 info（网络或缓存），供上层做"无楼栋直达"判断。 */
+    onInfoLoaded: (LaundryStoreInfo?) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val default = store.defaultStore()
@@ -73,6 +75,7 @@ fun LaundryHome(
                     if (info == null) info = store.loadStoreInfo(d.id)
                 }
             loading = false
+            onInfoLoaded(info)
         }
     }
 

@@ -13,13 +13,10 @@ import com.buguake.timetable.campus.laundry.LaundryStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
- * 洗衣房 2×2 小组件：展示上次在应用内浏览过的楼栋，各分类的空闲台数
- * （只突出洗衣机/烘干机两行）。数据来自应用内每次刷新设备状态时写入的快照，
+ * 洗衣房 2×1 小组件：一行速览上次在应用内浏览过的楼栋的空闲台数
+ * （"空闲 洗衣 N · 烘干 M"）。数据来自应用内每次刷新设备状态时写入的快照，
  * 小组件自身**不发起网络请求**——进入应用洗衣房页刷新后桌面同步更新。
  */
 class LaundryWidgetProvider : AppWidgetProvider() {
@@ -56,30 +53,14 @@ class LaundryWidgetProvider : AppWidgetProvider() {
         }
 
         private fun buildViews(context: Context): RemoteViews {
-            val views = RemoteViews(context.packageName, R.layout.widget_laundry_2x2)
+            val views = RemoteViews(context.packageName, R.layout.widget_laundry_2x1)
             val data = LaundryStore.getInstance(context).loadWidgetSnapshot()
             if (data == null) {
                 views.setTextViewText(R.id.laundry_house, "洗衣房")
-                views.setTextViewText(R.id.laundry_washer, "进入「校园 → 洗衣房」")
-                views.setTextViewText(R.id.laundry_dryer, "选择楼栋后这里显示空闲台数")
-                views.setTextViewText(R.id.laundry_updated, "")
+                views.setTextViewText(R.id.laundry_summary, "进入「校园 → 洗衣房」刷新")
             } else {
                 views.setTextViewText(R.id.laundry_house, data.houseName)
-                // 只展示洗衣机/烘干机两行；门店没有烘干机时如实标注
-                val washer = data.rows.firstOrNull { it.name.contains("洗衣") }
-                val dryer = data.rows.firstOrNull { it.name.contains("烘干") }
-                views.setTextViewText(
-                    R.id.laundry_washer,
-                    if (washer == null) "暂无洗衣机" else "洗衣机 ${washer.idle} 台空闲",
-                )
-                views.setTextViewText(
-                    R.id.laundry_dryer,
-                    if (dryer == null) "暂无烘干机" else "烘干机 ${dryer.idle} 台空闲",
-                )
-                views.setTextViewText(
-                    R.id.laundry_updated,
-                    if (data.updatedAt > 0) "更新于 " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(data.updatedAt)) else "",
-                )
+                views.setTextViewText(R.id.laundry_summary, summaryText(data))
             }
             val pi = PendingIntent.getActivity(
                 context, 0,
@@ -88,6 +69,17 @@ class LaundryWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.laundry_root, pi)
             return views
+        }
+
+        /** "空闲 洗衣 9 · 烘干 1"；门店缺某分类时如实标注。 */
+        internal fun summaryText(data: com.buguake.timetable.campus.laundry.LaundryWidgetData): String {
+            val parts = mutableListOf<String>()
+            val washer = data.rows.firstOrNull { it.name.contains("洗衣") }
+            val dryer = data.rows.firstOrNull { it.name.contains("烘干") }
+            if (washer != null) parts += "洗衣 ${washer.idle}"
+            if (dryer != null) parts += "烘干 ${dryer.idle}"
+            if (parts.isEmpty()) return "暂无洗衣机/烘干机"
+            return "空闲 " + parts.joinToString(" · ")
         }
     }
 }

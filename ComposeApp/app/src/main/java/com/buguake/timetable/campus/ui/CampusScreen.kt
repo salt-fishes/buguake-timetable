@@ -30,12 +30,23 @@ fun CampusScreen(
     openUnlockSeq: Int = 0,
     /** 开门页消费完本次直达请求后回传序号，供上层做一次性放行（防切页/返回重复开门）。 */
     onUnlockConsumed: (Int) -> Unit = {},
+    /** 洗衣房小组件/快捷方式直达序号（>0 时直接进入洗衣房功能页）。 */
+    openLaundrySeq: Int = 0,
+    onLaundryConsumed: (Int) -> Unit = {},
 ) {
     var activeId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // 快捷方式进入：直达宿舍开门页（页内会用默认门锁自动开门）
     LaunchedEffect(openUnlockSeq) {
         if (openUnlockSeq > 0) activeId = CAMPUS_FEATURES.first().id
+    }
+
+    // 洗衣房小组件/快捷方式进入：直达洗衣房（楼栋由缓存自动带出）
+    LaunchedEffect(openLaundrySeq) {
+        if (openLaundrySeq > 0) {
+            activeId = "laundry"
+            onLaundryConsumed(openLaundrySeq)
+        }
     }
 
     // 兜底返回：功能页自身若未处理返回，则退回首页

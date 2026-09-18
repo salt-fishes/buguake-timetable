@@ -9,6 +9,7 @@ import android.content.Intent
 import android.widget.RemoteViews
 import com.buguake.timetable.MainActivity
 import com.buguake.timetable.R
+import com.buguake.timetable.campus.LaundryLaunch
 import com.buguake.timetable.campus.laundry.LaundryStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,9 +63,12 @@ class LaundryWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.laundry_house, data.houseName)
                 views.setTextViewText(R.id.laundry_summary, summaryText(data))
             }
+            // 点击直达应用内洗衣房：LaundryLaunch 总线驱动，楼栋由本地缓存自动带出
             val pi = PendingIntent.getActivity(
                 context, 0,
-                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(context, MainActivity::class.java)
+                    .setAction(LaundryLaunch.ACTION_OPEN)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             views.setOnClickPendingIntent(R.id.laundry_root, pi)

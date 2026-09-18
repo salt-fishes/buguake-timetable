@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.buguake.timetable.campus.LaundryLaunch
 import com.buguake.timetable.campus.QuickUnlock
 import com.buguake.timetable.ui.AppRoot
 
@@ -27,6 +28,8 @@ class MainActivity : ComponentActivity() {
         }
         // 「长按应用图标 → 快速开锁」快捷方式：只登记序号，界面侧决定何时开门
         notifyUnlockIfTrusted(intent)
+        // 洗衣房小组件 / 快捷方式：仅打开界面（无敏感副作用），不校验调用方
+        LaundryLaunch.notifyIfMatches(intent)
         setContent {
             AppRoot()
         }
@@ -37,6 +40,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         notifyUnlockIfTrusted(intent)
+        LaundryLaunch.notifyIfMatches(intent)
     }
 
     private fun notifyUnlockIfTrusted(intent: Intent?) {

@@ -155,6 +155,10 @@ private data class MoveReq(
     // saveable 保证旋转/重建界面后也不会拿旧序号再开一次
     var consumedUnlockSeq by rememberSaveable { mutableIntStateOf(0) }
     val pendingUnlockSeq = if (quickUnlockSeq > consumedUnlockSeq) quickUnlockSeq else 0
+    // 「洗衣房小组件 / 快捷方式」直达：切到校园页并打开洗衣房（楼栋由缓存自动带出）
+    val laundrySeq by com.buguake.timetable.campus.LaundryLaunch.seq.collectAsState()
+    var consumedLaundrySeq by rememberSaveable { mutableIntStateOf(0) }
+    val pendingLaundrySeq = if (laundrySeq > consumedLaundrySeq) laundrySeq else 0
     var selectedEntry by remember { mutableStateOf<EntryWithCourse?>(null) }
     var editingEntry by remember { mutableStateOf<EntryWithCourse?>(null) }
     var showAddCourse by rememberSaveable { mutableStateOf(false) }
@@ -191,6 +195,16 @@ private data class MoveReq(
         showWebImport = false
         selectedEntry = null
         editingEntry = null
+    }
+
+    // 洗衣房小组件 / 快捷方式直达：同样切到校园页并收起二级页
+    LaunchedEffect(laundrySeq) {
+        if (laundrySeq <= 0) return@LaunchedEffect
+        tab = 2
+        showAbout = false
+        showPrivacy = false
+        showCompare = false
+        showWebImport = false
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -871,6 +885,8 @@ private data class MoveReq(
                     showSnackbar = showSnackbar,
                     openUnlockSeq = pendingUnlockSeq,
                     onUnlockConsumed = { consumedUnlockSeq = it },
+                    openLaundrySeq = pendingLaundrySeq,
+                    onLaundryConsumed = { consumedLaundrySeq = it },
                 )
                 else -> MineScreen(
                     settings = settings,

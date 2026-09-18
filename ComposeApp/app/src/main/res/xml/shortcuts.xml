@@ -19,4 +19,16 @@
             android:targetClass="com.buguake.timetable.MainActivity" />
         <categories android:name="android.intent.category.LAUNCHER" />
     </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/widget_preview_laundry"
+        android:shortcutId="laundry"
+        android:shortcutLongLabel="@string/shortcut_laundry_long"
+        android:shortcutShortLabel="@string/shortcut_laundry_short">
+        <intent
+            android:action="com.buguake.timetable.campus.LAUNDRY"
+            android:targetClass="com.buguake.timetable.MainActivity" />
+        <categories android:name="android.intent.category.LAUNCHER" />
+    </shortcut>
 </shortcuts>

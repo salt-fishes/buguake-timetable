@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.buguake.timetable.ui.theme.LockIcon
+import com.buguake.timetable.ui.theme.LaundryIcon
 
 /**
  * 校园 tab 的功能入口注册表：新增校园功能只需在此追加一条，
@@ -50,6 +51,19 @@ val CAMPUS_FEATURES: List<CampusFeature> = listOf(
         icon = Icons.Filled.DateRange,
         content = { glass, showSnackbar, _, _, onBack ->
             CampusExamFeature(
+                glass = glass,
+                showSnackbar = showSnackbar,
+                onBack = onBack,
+            )
+        },
+    ),
+    CampusFeature(
+        id = "laundry",
+        title = "洗衣房",
+        subtitle = "看洗衣机/烘干机哪台空着，一键去小程序开洗",
+        icon = LaundryIcon,
+        content = { glass, showSnackbar, _, _, onBack ->
+            LaundryFeature(
                 glass = glass,
                 showSnackbar = showSnackbar,
                 onBack = onBack,

@@ -27,6 +27,9 @@
          授予后走 setExactAndAllowWhileIdle 准点触发，不再依赖窗口闹钟降级。 -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- 洗衣房「附近门店」（可选）：仅在你点「附近门店」时取一次大致位置列出附近门店；
+         拒绝授权不影响任何功能（退化为门店名搜索），不后台采集、不留存轨迹 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:usesCleartextTraffic="true"

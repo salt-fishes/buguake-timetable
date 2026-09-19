@@ -524,6 +524,8 @@ private data class MoveReq(
     var showNewTimetableDialog by rememberSaveable { mutableStateOf(false) }
     var autoCreatedTimetableId by rememberSaveable { mutableStateOf(0L) }
     var pendingAutoName by rememberSaveable { mutableStateOf("") }
+    // 「从教务网站导入」预置的目标课表：先进导入流程，再按此 id 注入适配器脚本
+    var presetImportTableId by rememberSaveable { mutableStateOf(0L) }
     val confirmNewTimetable: (String, Long?) -> Unit = { name, copyFrom ->
         showNewTimetableDialog = false
         showTimetableManage = false
@@ -546,6 +548,31 @@ private data class MoveReq(
                 }.onFailure { e ->
                     showSnackbar("创建失败：${e.message ?: "未知错误"}")
                 }
+            }
+        }
+    }
+
+    // ---- 新建课表 → 从教务网站导入：先建表并设为活动，再进导入流程（不再让用户选一次目标） ----
+    val startWebImportWithNewTimetable: (String) -> Unit = { name ->
+        showNewTimetableDialog = false
+        showTimetableManage = false
+        scope.launch {
+            val result = runCatching {
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    scheduleRepo.createTimetable(
+                        name.ifBlank { "新课表" },
+                        settings.semesterStart,
+                        settings.totalWeeks,
+                    )
+                }
+            }
+            result.onSuccess { id ->
+                settingsRepo.setActiveTimetable(id)
+                AppRefresh.onDataChanged(context)
+                presetImportTableId = id
+                showWebImport = true
+            }.onFailure { e ->
+                showSnackbar("创建失败：${e.message ?: "未知错误"}")
             }
         }
     }
@@ -849,7 +876,7 @@ private data class MoveReq(
                     glass = glassOn,
                     onCourseClick = { selectedEntry = it },
                     onShowSnackbar = showSnackbar,
-                    onImportClick = { showWebImport = true },
+                    onImportClick = { presetImportTableId = 0L; showWebImport = true },
                     onAddClick = {
                         // 收起已打开的课程详情/编辑弹窗，避免两个面板叠放
                         selectedEntry = null
@@ -893,7 +920,7 @@ private data class MoveReq(
                     glass = glassOn,
                     courseCount = courses.size,
                     entryCount = entries.size,
-                    onImport = { showWebImport = true },
+                    onImport = { presetImportTableId = 0L; showWebImport = true },
                     onSetSemesterStart = setSemesterStart,
                     onSetTotalWeeks = {
                         scope.launch {
@@ -1032,6 +1059,12 @@ private data class MoveReq(
                 showTimetableManage = false
                 showNewTimetableDialog = true
             },
+            onImportFromWeb = {
+                // 不预建课表：直接进导入流程，在导入页里选目标
+                presetImportTableId = 0L
+                showTimetableManage = false
+                showWebImport = true
+            },
             onBack = { showTimetableManage = false },
         )
     }
@@ -1064,6 +1097,7 @@ private data class MoveReq(
             timetables = timetableInfos,
             onConfirm = confirmNewTimetable,
             onDismiss = { showNewTimetableDialog = false },
+            onImportFromWeb = startWebImportWithNewTimetable,
         )
     }
 
@@ -1247,7 +1281,11 @@ private data class MoveReq(
             defaultStartMillis = settings.semesterStart,
             defaultTotalWeeks = settings.totalWeeks,
             glass = glassOn,
-            onClose = { showWebImport = false },
+            presetImportTableId = presetImportTableId.takeIf { it != 0L },
+            onClose = {
+                showWebImport = false
+                presetImportTableId = 0L
+            },
         )
     }
 

@@ -32,6 +32,9 @@ private fun Step.depth(): Int = when (this) {
 
 /**
  * 教务网页导入全流程（学校选择 → 适配器 → 教务网页导入），由 AppShell 以覆盖页托管。
+ *
+ * @param presetImportTableId 进入前已经建好的目标课表 id（「新建课表 → 从教务网站导入」路径）。
+ *   非空时内嵌浏览器不再弹「选择目标课表」，直接以该课表为导入目标。
  */
 @Composable
 fun WebImportFlow(
@@ -39,6 +42,7 @@ fun WebImportFlow(
     defaultStartMillis: Long,
     defaultTotalWeeks: Int,
     glass: Boolean = false,
+    presetImportTableId: Long? = null,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -124,6 +128,7 @@ fun WebImportFlow(
             timetables = timetables,
             defaultStartMillis = defaultStartMillis,
             defaultTotalWeeks = defaultTotalWeeks,
+            presetImportTableId = presetImportTableId,
             glass = glass,
             onFinished = onClose,
             onBack = { step = Step.Adapter(s.school) },

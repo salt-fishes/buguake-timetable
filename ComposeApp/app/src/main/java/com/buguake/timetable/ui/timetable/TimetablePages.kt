@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.LazyColumn
@@ -147,10 +148,14 @@ fun NewTimetableDialog(
     timetables: List<TimetableInfo>,
     onConfirm: (name: String, copyFromId: Long?) -> Unit,
     onDismiss: () -> Unit,
+    /** 选定「从教务网站导入」并确认：已按名字建好空白课表，调用方据此进入教务网页导入流程。 */
+    onImportFromWeb: (name: String) -> Unit = {},
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     // null = 空白课表；>0 = 复制现有课表 id
     var copyFrom by rememberSaveable { mutableStateOf(0L) }
+    // 来源除「空白 / 复制现有」外，还有「从教务网站导入」直接进导入流程
+    var fromWeb by rememberSaveable { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -175,22 +180,30 @@ fun NewTimetableDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     FilterChip(
-                        selected = copyFrom == 0L,
-                        onClick = { copyFrom = 0L },
+                        selected = !fromWeb && copyFrom == 0L,
+                        onClick = { fromWeb = false; copyFrom = 0L },
                         label = { Text("空白课表") },
+                    )
+                    FilterChip(
+                        selected = fromWeb,
+                        onClick = { fromWeb = true; copyFrom = 0L },
+                        label = { Text("从教务网站导入") },
                     )
                     timetables.forEach { info ->
                         FilterChip(
-                            selected = copyFrom == info.timetable.id,
-                            onClick = { copyFrom = info.timetable.id },
+                            selected = !fromWeb && copyFrom == info.timetable.id,
+                            onClick = { fromWeb = false; copyFrom = info.timetable.id },
                             label = { Text("复制《${info.timetable.name}》", maxLines = 1) },
                         )
                     }
                 }
                 Spacer(Modifier.padding(top = 4.dp))
                 Text(
-                    if (copyFrom == 0L) "创建空课表，之后通过教务网页导入填充课程"
-                    else "复制该课表全部课程（周次重置为整学期），之后可修改",
+                    when {
+                        fromWeb -> "建好课表后直接进入教务网页导入：选学校 → 登录教务 → 一键拉取课程"
+                        copyFrom == 0L -> "创建空课表，之后通过教务网页导入填充课程"
+                        else -> "复制该课表全部课程（周次重置为整学期），之后可修改"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -198,9 +211,13 @@ fun NewTimetableDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                onConfirm(name.trim(), copyFrom.takeIf { it != 0L })
+                if (fromWeb) {
+                    onImportFromWeb(name.trim())
+                } else {
+                    onConfirm(name.trim(), copyFrom.takeIf { it != 0L })
+                }
             }) {
-                Text("创建")
+                Text(if (fromWeb) "创建并导入" else "创建")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
@@ -377,6 +394,8 @@ fun TimetableManagePage(
     onCopy: (TimetableEntity) -> Unit,
     onDelete: (TimetableEntity) -> Unit,
     onCreate: () -> Unit,
+    /** 直接进入教务网页导入（不预先建课表，在导入页里选目标课表）。 */
+    onImportFromWeb: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     var editTarget by remember { mutableStateOf<TimetableEntity?>(null) }
@@ -394,6 +413,7 @@ fun TimetableManagePage(
                     }
                 },
                 actions = {
+                    TextButton(onClick = onImportFromWeb) { Text("从教务导入") }
                     TextButton(onClick = onCreate) { Text("新建") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

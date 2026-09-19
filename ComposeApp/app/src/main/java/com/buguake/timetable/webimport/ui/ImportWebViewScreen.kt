@@ -8,6 +8,7 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
@@ -21,9 +22,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import com.buguake.timetable.ui.theme.AppMotion
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,6 +84,8 @@ fun ImportWebViewScreen(
     timetables: List<TimetableInfo>,
     defaultStartMillis: Long,
     defaultTotalWeeks: Int,
+    /** 已建好的目标课表 id（「新建课表 → 从教务网站导入」路径）：有值时不再弹课表选择。 */
+    presetImportTableId: Long? = null,
     glass: Boolean = false,
     onFinished: () -> Unit,
     onBack: () -> Unit,
@@ -93,7 +98,7 @@ fun ImportWebViewScreen(
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableStateOf(0) }
-    var importTableId by remember { mutableStateOf<Long?>(null) }
+    var importTableId by remember { mutableStateOf(presetImportTableId) }
     var showTablePicker by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<BridgeDialog?>(null) }
     var injectedAtTable by remember { mutableStateOf<Long?>(null) }
@@ -198,6 +203,18 @@ fun ImportWebViewScreen(
             android.util.Log.i("WebImport", "同页重复注入：先重载页面再自动执行")
             pendingInject = true
             webViewRef?.reload()
+            return
+        }
+        val wv = webViewRef
+        if (wv == null || currentUrl.isBlank() || currentUrl == "about:blank") {
+            // 还没进任何教务页面就注入，脚本找不到页面元素会静默失败——先把原因说清楚
+            scope.launch {
+                snackbarHostState.showSnackbar("请先在上方地址栏打开本校教务系统并登录，再执行导入")
+            }
+            if (!isEditingUrl) {
+                urlInput = currentUrl
+                isEditingUrl = true
+            }
             return
         }
         injectedAtTable = tableId
@@ -404,6 +421,9 @@ fun ImportWebViewScreen(
                 injectAdapter()
             },
             onDismiss = { showTablePicker = false },
+            onCreated = { _, name ->
+                scope.launch { snackbarHostState.showSnackbar("已新建《$name》，正在导入课程…") }
+            },
         )
     }
 
@@ -521,7 +541,14 @@ private fun SingleSelectionDialog(
     )
 }
 
-/** 目标课表选择弹窗：现有课表单选 + 新建空白课表。 */
+/**
+ * 目标课表选择弹窗：现有课表 / 新建空白课表 两个模式用 FilterChip 切换
+ * （与本项目已跑通的 [com.buguake.timetable.ui.timetable.ImportChooseDialog] 同一套交互）。
+ *
+ * 早期实现把「新建空白课表」做成可滚动列表末尾的一行可点文本，既没有选中态也没有任何
+ * 反馈，点击后与未点击在界面上完全一样——已有课表时表现为"点了没反应"。
+ * 现在改为显式模式切换，并补齐：新课表设为活动课表、创建成功提示、创建失败原因回显。
+ */
 @Composable
 private fun TablePickerDialog(
     timetables: List<TimetableInfo>,
@@ -530,75 +557,108 @@ private fun TablePickerDialog(
     defaultTotalWeeks: Int,
     onPick: (Long) -> Unit,
     onDismiss: () -> Unit,
+    /** 新建课表成功后的提示出口（由宿主用 Snackbar 呈现，弹窗自身不带宿主）。 */
+    onCreated: (Long, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settingsRepo = remember { SettingsRepository.getInstance(context) }
     val scheduleRepo = remember { ScheduleRepository.getInstance(context) }
-    var selected by remember { mutableStateOf(currentId ?: timetables.firstOrNull()?.timetable?.id) }
-    var creating by remember { mutableStateOf(false) }
+
+    // 默认落在「新建空白课表」：从教务导入的常见意图是导入到新课表，
+    // 覆盖已有课表会清空原课程，不做默认项。
+    var mode by remember { mutableStateOf(PickerMode.CREATE) }
+    var existingId by remember { mutableStateOf(currentId ?: timetables.firstOrNull()?.timetable?.id) }
     var newName by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("选择目标课表") },
         text = {
             Column {
-                if (creating) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it; error = null },
-                        label = { Text("新课表名称") },
-                        isError = error != null,
-                        supportingText = { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = mode == PickerMode.CREATE,
+                        onClick = { mode = PickerMode.CREATE; error = null },
+                        label = { Text("新建空白课表") },
                     )
-                } else {
-                    Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 360.dp)) {
-                        timetables.forEach { info ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selected = info.timetable.id }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = selected == info.timetable.id,
-                                    onClick = { selected = info.timetable.id },
-                                )
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        info.timetable.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        "${info.courseCount} 门课程",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                    FilterChip(
+                        selected = mode == PickerMode.EXISTING,
+                        onClick = { mode = PickerMode.EXISTING; error = null },
+                        label = { Text("已有课表") },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+
+                when (mode) {
+                    PickerMode.CREATE -> {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it; error = null },
+                            label = { Text("新课表名称") },
+                            placeholder = { Text("如：2026 春 个人课表") },
+                            isError = error != null,
+                            supportingText = {
+                                Text(error ?: "课表先建好，随后点「执行导入」拉取课程")
+                            },
+                            singleLine = true,
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    PickerMode.EXISTING -> {
+                        if (timetables.isEmpty()) {
+                            Text(
+                                "还没有已建课表，请切到「新建空白课表」",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 300.dp)) {
+                                timetables.forEach { info ->
+                                    val selected = existingId == info.timetable.id
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable(enabled = !busy) { existingId = info.timetable.id }
+                                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        RadioButton(
+                                            selected = selected,
+                                            onClick = { existingId = info.timetable.id },
+                                            enabled = !busy,
+                                        )
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                info.timetable.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                            )
+                                            Text(
+                                                "${info.courseCount} 门课程",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { creating = true }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(Modifier.width(8.dp))
                             Text(
-                                "新建空白课表",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                "导入会写入所选课表；原有课程不会被清空",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        error?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
                             )
                         }
                     }
@@ -606,32 +666,56 @@ private fun TablePickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                if (creating) {
-                    val name = newName.trim()
-                    if (name.isEmpty()) {
-                        error = "请输入课表名称"
-                        return@TextButton
-                    }
-                    scope.launch {
-                        val id = runCatching {
-                            scheduleRepo.createTimetable(name, defaultStartMillis, defaultTotalWeeks)
-                        }.getOrNull()
-                        if (id != null) {
-                            onPick(id)
-                        } else {
-                            error = "创建失败，请重试"
+            TextButton(
+                onClick = {
+                    when (mode) {
+                        PickerMode.EXISTING -> existingId?.let(onPick) ?: run { error = "请选择一个课表" }
+
+                        PickerMode.CREATE -> {
+                            val name = newName.trim()
+                            if (name.isEmpty()) {
+                                error = "请输入课表名称"
+                                return@TextButton
+                            }
+                            busy = true
+                            error = null
+                            scope.launch {
+                                val result = runCatching {
+                                    // 与其他写库路径一致：Room 操作用 IO 派发
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        scheduleRepo.createTimetable(name, defaultStartMillis, defaultTotalWeeks)
+                                    }
+                                }
+                                busy = false
+                                result.onSuccess { id ->
+                                    // 新建的课表设为活动课表，否则用户看不到任何变化（表现为"没反应"）
+                                    settingsRepo.setActiveTimetable(id)
+                                    AppRefresh.onDataChanged(context)
+                                    onCreated(id, name)
+                                    onPick(id)
+                                }.onFailure { e ->
+                                    error = "创建失败：${e.message ?: "未知错误"}"
+                                }
+                            }
                         }
                     }
-                } else {
-                    selected?.let(onPick)
-                }
-            }) { Text(if (creating) "创建并导入" else "确定") }
+                },
+                enabled = !busy,
+            ) {
+                Text(
+                    when {
+                        busy -> "创建中…"
+                        mode == PickerMode.CREATE -> "创建并导入"
+                        else -> "确定"
+                    }
+                )
+            }
         },
         dismissButton = {
-            TextButton(onClick = {
-                if (creating) creating = false else onDismiss()
-            }) { Text(if (creating) "返回" else "取消") }
+            TextButton(onClick = onDismiss, enabled = !busy) { Text("取消") }
         },
     )
 }
+
+/** 目标课表选择模式。 */
+private enum class PickerMode { CREATE, EXISTING }

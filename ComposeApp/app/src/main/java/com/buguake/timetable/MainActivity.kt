@@ -19,19 +19,38 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // 边到边绘制：背景图延伸至状态栏/导航条下方，内容用 insets 避让
         enableEdgeToEdge()
-        // Android 13+ 前台服务通知需运行时权限
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100)
+        // 调试构建开启严格模式：主线程磁盘/网络 I/O 打日志（v1.6 基线测量与回归用）
+        if (BuildConfig.DEBUG) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build(),
+            )
         }
         // 「长按应用图标 → 快速开锁」快捷方式：只登记序号，界面侧决定何时开门
         notifyUnlockIfTrusted(intent)
         // 洗衣房小组件 / 快捷方式：仅打开界面（无敏感副作用），不校验调用方
         LaundryLaunch.notifyIfMatches(intent)
         setContent {
+            // 通知权限申请延后到首帧组合完成后：不再在 onCreate 抢首帧、抢系统弹窗焦点
+            androidx.compose.runtime.LaunchedEffect(true) {
+                kotlinx.coroutines.yield()
+                requestNotificationPermissionIfNeeded()
+            }
             AppRoot()
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        // Android 13+ 前台服务通知需运行时权限
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100)
         }
     }
 

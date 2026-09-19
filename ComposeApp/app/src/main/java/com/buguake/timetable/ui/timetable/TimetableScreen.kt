@@ -155,8 +155,15 @@ fun TimetableScreen(
     val semesterStart = settings.semesterStartDate
     val context = androidx.compose.ui.platform.LocalContext.current
     // 教务系统读取的考试合并进课表网格：负数 id 与真实课程条目区分；
-    // 设置里关掉「首页显示考试」则完全不加载
-    val examBundle = remember { com.buguake.timetable.campus.CampusStore.getInstance(context).loadExams() }
+    // 设置里关掉「首页显示考试」则完全不加载。
+    // 读取涉及偏好 + Keystore 解密 + JSON，异步化避免落在首帧组合期（v1.6 P0-2）；
+    // 未就绪前为 null，考试叠加晚一拍出现，不影响课程网格首帧。
+    val examBundle by produceState<com.buguake.timetable.campus.exam.CampusExamBundle?>(null, settings.showExamsOnHome) {
+        if (!settings.showExamsOnHome) return@produceState
+        value = withContext(Dispatchers.IO) {
+            com.buguake.timetable.campus.CampusStore.getInstance(context).loadExams()
+        }
+    }
     val examPairs = remember(examBundle, semesterStart, settings.showExamsOnHome) {
         if (semesterStart == null || !settings.showExamsOnHome) emptyList()
         else examBundle?.exams.orEmpty().filter { it.hasTime }.mapIndexed { i, e ->

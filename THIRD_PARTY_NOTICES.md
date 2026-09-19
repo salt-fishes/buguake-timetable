@@ -10,6 +10,9 @@
 - 引用内容（已落地）：
   - 教务网页导入的 JS 桥协议设计（`WebBridgeProtocol.kt` / `WebBridgeHandler.kt`）
   - 学校适配器索引 Protobuf 定义（`school_index.proto`，见 `docs/school_index.proto`）
+  - WebView 桌面模式请求重放（`WebViewRequestInterceptor.kt` / `AndroidWebConstants.kt`，
+    本项目移植为 `webimport/ui/WebViewPostInterceptor.kt`，网络层 Ktor 改为 okhttp）：
+    解决部分教务厂商（如超星）按 `X-Requested-With` 包名特征拦截内嵌浏览器导致无法登录的问题
 - 本项目对上述引用内容有修改（适配本项目包名与数据模型），
   修改部分同样以 Apache License 2.0 释出。
 

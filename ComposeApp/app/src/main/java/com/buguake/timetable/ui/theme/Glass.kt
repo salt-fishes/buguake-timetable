@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -23,7 +25,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+
+/** 背景解码结果的进程级缓存：key = path@mtime，容量 2 张（1440px 下采样每张约 15MB）。 */
+private val bgDecodeCache = object : android.util.LruCache<String, Bitmap>(2) {}
 
 /**
  * 磨砂玻璃原语（移植自 FU—Liquiglass 设计系统，Web → Compose）。
@@ -107,14 +114,23 @@ fun CustomBackgroundLayer(
     val cs = MaterialTheme.colorScheme
     // 以文件 mtime 作为缓存键：覆盖选择新图后立即刷新（路径不变也能重解码）；
     // 无图时 bitmap 为 null，走内置渐变。
+    // 解码在 IO 线程异步做（JPEG 解码落在首帧组合期是 v1.6 瓶颈 B2 之一）：
+    // 首帧先渲染下方内置渐变占位，解码完成后换图；进程级 LruCache 让回前台不再重解码。
     val stamp = if (imagePath.isNotBlank()) File(imagePath).lastModified() else 0L
-    val bitmap = remember(imagePath, stamp) {
-        if (imagePath.isBlank()) null else decodeDownsampled(imagePath, maxDim = 1440)
+    val bitmap by produceState<Bitmap?>(null, imagePath, stamp) {
+        if (imagePath.isBlank()) return@produceState
+        value = withContext(Dispatchers.IO) {
+            val key = "$imagePath@$stamp"
+            bgDecodeCache.get(key) ?: decodeDownsampled(imagePath, maxDim = 1440)?.also {
+                bgDecodeCache.put(key, it)
+            }
+        }
     }
     Box(Modifier.fillMaxSize()) {
-        if (bitmap != null) {
+        val bmp = bitmap
+        if (bmp != null) {
             Image(
-                bitmap = bitmap.asImageBitmap(),
+                bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

@@ -2,6 +2,7 @@ package com.buguake.timetable.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,15 +69,22 @@ class SettingsRepository private constructor(context: Context) {
     private val dao = AppDatabase.getInstance(context).scheduleDao()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _activeTimetableId =
-        MutableStateFlow(prefs.getLong(KEY_ACTIVE_TIMETABLE, 1L))
+    // 就绪门闩：偏好首读 + 活动课表首条数据都在 IO 线程完成后放行（v1.6 P0-2/P1-3）。
+    // 提醒重排、开机广播等路径必须先 awaitReady()，否则会读到 timetableId=0 排空提醒。
+    private val ready = CompletableDeferred<Unit>()
+
+    /** 挂起直到设置仓库完成首读（偏好 + 活动课表）。幂等，可重复调用。 */
+    suspend fun awaitReady() = ready.await()
+
+    private val _activeTimetableId = MutableStateFlow(1L)
     val activeTimetableIdFlow: StateFlow<Long> = _activeTimetableId
     val activeTimetableId: Long get() = _activeTimetableId.value
 
-    private var prefsSettings: ScheduleSettings = readPrefs()
+    // 初始值用纯内存默认（不碰磁盘）；真实偏好在 init 的 IO 首读后替换并 recompute
+    private var prefsSettings: ScheduleSettings = defaultSettings()
     private var activeTimetable: TimetableEntity? = null
 
-    private val _settings = MutableStateFlow(merged())
+    private val _settings = MutableStateFlow(prefsSettings)
     val settings: Flow<ScheduleSettings> = _settings
 
     val current: ScheduleSettings get() = _settings.value
@@ -91,11 +99,16 @@ class SettingsRepository private constructor(context: Context) {
     init {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         scope.launch {
+            // 首次磁盘读取全部移出主线程（构造期零 I/O）
+            _activeTimetableId.value = prefs.getLong(KEY_ACTIVE_TIMETABLE, 1L)
+            prefsSettings = readPrefs()
+            recompute()
             _activeTimetableId
                 .flatMapLatest { id -> dao.observeTimetable(id) }
                 .collect { tt ->
                     activeTimetable = tt
                     recompute()
+                    ready.complete(Unit) // 首条课表数据到达即就绪（重复调用为 no-op）
                 }
         }
     }
@@ -263,6 +276,27 @@ class SettingsRepository private constructor(context: Context) {
         if (tt != null) dao.updateTimetable(tt.copy(sectionTimesCsv = encodeSections(times)))
         else prefs.edit().putString(KEY_SECTION_TIMES, encodeSections(times)).apply()
     }
+
+    /** 纯内存默认设置（不碰磁盘）：仓库首读完成前的临时值，真实偏好在 IO 首读后替换。 */
+    private fun defaultSettings(): ScheduleSettings = ScheduleSettings(
+        semesterStart = DEFAULT_SEMESTER_START_MILLIS,
+        sectionsPerDay = 12,
+        totalWeeks = DEFAULT_TOTAL_WEEKS,
+        showWeekend = true,
+        showNonCurrentWeek = false,
+        showTeacherOnBlock = true,
+        showLocationOnBlock = true,
+        dynamicColor = false,
+        darkMode = "system",
+        sectionTimes = sectionTimesFor(null, 12, DEFAULT_SECTION_TIMES),
+        remindEnabled = false,
+        remindMinutesBefore = REMIND_MINUTES_DEFAULT,
+        customBgEnabled = true,
+        customBgPath = "",
+        customBgBlurDp = CUSTOM_BG_BLUR_DEFAULT,
+        showExamsOnHome = true,
+        moveScope = MOVE_SCOPE_ASK,
+    )
 
     private fun readPrefs(): ScheduleSettings {
         val n = prefs.getInt(KEY_SECTIONS_PER_DAY, 12).coerceIn(4, 16)

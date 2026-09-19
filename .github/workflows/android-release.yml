@@ -60,9 +60,28 @@ jobs:
         working-directory: ComposeApp
         run: ./gradlew assembleRelease --console=plain --stacktrace
 
+      # 更新记录的唯一事实源是 about.html：取最顶部版本段作为 Release 说明
+      # （应用内「检查更新」弹窗的 notes 即来自 Release body）
+      - name: Extract release notes from about.html
+        run: |
+          python3 - <<'PYEOF'
+          import re, html
+          try:
+              src = open('ComposeApp/app/src/main/assets/html/about.html', encoding='utf-8').read()
+              blocks = re.split(r'<p><b>(v[\d.]+)</b></p>', src)
+              ver, body = blocks[1], blocks[2]
+              text = html.unescape(re.sub(r'<[^>]+>', '\n', body))
+              items = [l.strip() for l in text.splitlines() if l.strip()]
+              notes = ver + "\n\n" + "\n".join("· " + i for i in items[:10])
+          except Exception:
+              notes = "更新内容见应用内「关于 → 更新记录」。"
+          open('release_notes.md', 'w', encoding='utf-8').write(notes)
+          PYEOF
+
       - name: Upload release APK
         if: steps.signing.outputs.configured == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: ComposeApp/app/build/outputs/apk/release/app-release.apk
+          body_path: release_notes.md
           generate_release_notes: false

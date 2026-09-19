@@ -152,6 +152,7 @@ fun MineScreen(
             "display" -> "显示与样式"
             "calendar" -> "日历与导出"
             "data" -> "数据管理"
+            "repo" -> "导入源仓库"
             else -> ""
         }
         if (pageTitle.isNotEmpty()) {
@@ -288,6 +289,8 @@ fun MineScreen(
                 ActionRow("课表管理", "多课表切换 / 重命名 / 复制") { Haptics.tick(context); onOpenTimetableManage() }
                 CardDivider()
                 ActionRow("课表对比（实验性）", "勾选多张课表，找共同空闲时间") { Haptics.tick(context); onOpenCompare() }
+                CardDivider()
+                ActionRow("导入源仓库", "适配器脚本与学校索引来源 · 支持自定义") { Haptics.tick(context); detailPageState = "repo" }
                 CardDivider()
                 ActionRow("显示与样式", "显示开关 · 长按范围 · 磨砂玻璃背景 · 深色模式") { Haptics.tick(context); detailPageState = "display" }
                 CardDivider()
@@ -497,6 +500,13 @@ fun MineScreen(
                     showClearConfirm = true
                 }
             }
+        }
+        }
+        // ---- 二级：导入源仓库 ----
+        if (detailPage == "repo") {
+        SectionHeader("导入源仓库")
+        GlassCard(glass, Modifier.fillMaxWidth()) {
+            RepoSettingsContent(glass = glass, onShowSnackbar = onShowSnackbar)
         }
         }
         }  // SwipeBackBox

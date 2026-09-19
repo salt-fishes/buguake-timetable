@@ -12,17 +12,18 @@ import java.io.IOException
 class SchoolIndexStore private constructor(context: Context) {
 
     private val sync = RepoSyncManager(context)
-    private val repo = RepoDescriptor.OFFICIAL
+    private val repoStore = RepoStore.getInstance(context)
 
     /** 本地缓存索引（首次使用前为 null）。 */
-    fun loadCached(): SchoolIndexData? = sync.cachedIndex(repo)
+    fun loadCached(): SchoolIndexData? = sync.cachedIndex(repoStore.selected())
 
     /**
      * 联网刷新索引。version_id 未变且未强制时直接返回缓存，不重复下载。
      * 协议版本不受支持时抛出 IOException（调用方展示，不静默使用未知协议）。
      */
-    suspend fun refresh(force: Boolean = false): Result<SchoolIndexData> =
-        sync.refreshIndex(repo, force).mapCatching { r ->
+    suspend fun refresh(force: Boolean = false): Result<SchoolIndexData> {
+        val repo = repoStore.selected()
+        return sync.refreshIndex(repo, force).mapCatching { r ->
             if (!r.protocolSupported) {
                 throw IOException(
                     "适配器索引协议版本 v${r.protocolVersion} 超出当前客户端支持范围" +
@@ -31,6 +32,7 @@ class SchoolIndexStore private constructor(context: Context) {
             }
             sync.cachedIndex(repo) ?: throw IOException("索引刷新后读取失败")
         }
+    }
 
     /** 刷新失败时的降级路径：缓存可用则返回缓存。 */
     suspend fun refreshOrCached(force: Boolean = false): Result<SchoolIndexData> {
@@ -42,7 +44,7 @@ class SchoolIndexStore private constructor(context: Context) {
 
     /** 适配器脚本全文（缓存优先，未命中联网下载）。 */
     suspend fun adapterJs(school: SchoolData, adapter: AdapterData): Result<String> =
-        sync.fetchAdapterScript(school.folder, adapter.jsPath, repo)
+        sync.fetchAdapterScript(school.folder, adapter.jsPath, repoStore.selected())
 
     companion object {
         @Volatile private var INSTANCE: SchoolIndexStore? = null

@@ -30,9 +30,116 @@ data class RepoDescriptor(
 ) {
     val id: String get() = "${owner}_$name"
 
+    /** 展示名。 */
+    val label: String
+        get() = when (id) {
+            OURS.id -> "本项目镜像（推荐）"
+            OFFICIAL.id -> "拾光官方"
+            else -> "自定义"
+        }
+
     companion object {
-        /** 默认导入源：拾光官方适配仓库（过渡期；自有 fork 审核后切换）。 */
+        /** 本项目维护的镜像仓库：当前默认导入源。上游失效时在此先同步修复。 */
+        val OURS = RepoDescriptor("salt-fishes", "shiguang_warehouse")
+
+        /** 拾光官方上游仓库（上游恢复后可切换回去）。 */
         val OFFICIAL = RepoDescriptor("XingHeYuZhuan", "shiguang_warehouse")
+
+        /** 预置仓库（顺序即展示顺序：本项目镜像在上）。 */
+        val PRESETS = listOf(OURS, OFFICIAL)
+
+        /**
+         * 从用户输入解析仓库：支持 "owner/name" 与完整 GitHub 仓库网址。
+         * 格式非法返回 null。
+         */
+        fun fromInput(text: String): RepoDescriptor? {
+            val t = text.trim().removePrefix("https://").removePrefix("http://")
+            val path = t.removePrefix("github.com/").removePrefix("raw.githubusercontent.com/").trim('/')
+            val seg = path.split("/", "?", "#").filter { it.isNotBlank() }
+            if (seg.size < 2) return null
+            val owner = seg[0]
+            val name = seg[1].removeSuffix(".git")
+            val ok = Regex("^[A-Za-z0-9_.-]+$")
+            if (!ok.matches(owner) || !ok.matches(name)) return null
+            return RepoDescriptor(owner, name)
+        }
+    }
+}
+
+/**
+ * 导入源仓库的本地选择与自定义列表（SharedPreferences，非敏感）。
+ *
+ * 预置两项：本项目镜像（默认）与拾光官方上游；用户可另加自定义仓库。
+ * 索引与脚本缓存按仓库 id 隔离（filesDir/webimport/<owner>_<name>/），切换即换源，
+ * 不需要清缓存。历史版本（v1.4/v1.5.0）固定使用官方仓库且无本设置，升级后默认
+ * 切到本项目镜像——上游失效期间这是唯一可用源。
+ */
+class RepoStore private constructor(context: Context) {
+
+    private val prefs = context.getSharedPreferences("webimport_repo", Context.MODE_PRIVATE)
+
+    /** 当前导入源（从未选择时为本项目镜像）。 */
+    fun selected(): RepoDescriptor =
+        prefs.getString(K_SELECTED, null)?.let { decode(it) } ?: RepoDescriptor.OURS
+
+    fun select(repo: RepoDescriptor) {
+        prefs.edit().putString(K_SELECTED, encode(repo)).apply()
+    }
+
+    /** 用户添加的自定义仓库。 */
+    fun customs(): List<RepoDescriptor> =
+        prefs.getString(K_CUSTOMS, null)
+            ?.let { runCatching { org.json.JSONArray(it) }.getOrNull() }
+            ?.let { arr ->
+                (0 until arr.length()).mapNotNull { i -> decode(arr.optString(i)) }
+            }
+            ?: emptyList()
+
+    /** 添加自定义仓库；与预置/已有重复时忽略。 */
+    fun addCustom(repo: RepoDescriptor) {
+        if (RepoDescriptor.PRESETS.any { it.id == repo.id }) return
+        val updated = (customs() + repo).distinctBy { it.id }
+        saveCustoms(updated)
+    }
+
+    fun removeCustom(repoId: String) {
+        saveCustoms(customs().filterNot { it.id == repoId })
+        if (selected().id == repoId) select(RepoDescriptor.OURS)
+    }
+
+    /** 全部可选仓库（预置在前，顺序即 UI 展示顺序）。 */
+    fun choices(): List<RepoDescriptor> = (RepoDescriptor.PRESETS + customs()).distinctBy { it.id }
+
+    private fun saveCustoms(list: List<RepoDescriptor>) {
+        val arr = org.json.JSONArray()
+        list.forEach { arr.put(encode(it)) }
+        prefs.edit().putString(K_CUSTOMS, arr.toString()).apply()
+    }
+
+    private fun encode(r: RepoDescriptor) = org.json.JSONObject()
+        .put("owner", r.owner).put("name", r.name)
+        .put("indexBranch", r.indexBranch).put("mainBranch", r.mainBranch)
+        .toString()
+
+    private fun decode(json: String): RepoDescriptor? = runCatching {
+        val o = org.json.JSONObject(json)
+        RepoDescriptor(
+            o.getString("owner"), o.getString("name"),
+            o.optString("indexBranch", "index-pb-release"),
+            o.optString("mainBranch", "main"),
+        )
+    }.getOrNull()
+
+    companion object {
+        private const val K_SELECTED = "selected_repo"
+        private const val K_CUSTOMS = "custom_repos"
+
+        @Volatile private var INSTANCE: RepoStore? = null
+
+        fun getInstance(context: Context): RepoStore =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: RepoStore(context.applicationContext).also { INSTANCE = it }
+            }
     }
 }
 

@@ -2,6 +2,7 @@ package com.buguake.timetable.webimport.ui
 
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -37,17 +38,28 @@ fun JwxtWebView(
     onProgress: (Int) -> Unit = {},
     /** 每次重组回调当前 WebView，调用方用它保存引用。 */
     onWebView: (WebView) -> Unit = {},
+    /** 回填 WebView 自带 UA（调用方切回手机模式时复用，与拾光 WebCompatDelegate 一致）。 */
+    onDefaultUserAgent: (String) -> Unit = {},
 ) {
     // 桌面模式可随时切换（切 UA + 重载），回调里读最新值
     val desktop by rememberUpdatedState(desktopMode)
+    val notifyDefaultUa by rememberUpdatedState(onDefaultUserAgent)
 
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
+                val defaultUa = settings.userAgentString
+                notifyDefaultUa(defaultUa)
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     databaseEnabled = true
+                    @Suppress("DEPRECATION")
+                    allowUniversalAccessFromFileURLs = true
+                    @Suppress("DEPRECATION")
+                    allowFileAccessFromFileURLs = true
+                    allowFileAccess = true
+                    allowContentAccess = true
                     // 学校站点常见 http 资源混载，放行
                     mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     useWideViewPort = true
@@ -56,20 +68,35 @@ fun JwxtWebView(
                     builtInZoomControls = true
                     displayZoomControls = false
                 }
-                applyDesktopMode(this, desktop)
+                applyDesktopMode(this, desktop, defaultUa)
                 // 仅 debug 构建允许 chrome://inspect 远程调试：
                 // 正式包若放开，任何拿到设备的人都能查看教务会话页面内容
                 WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
                 addJavascriptInterface(bridge, bridgeName)
+                // POST 重放桥：桌面模式下的 XHR/Fetch/Form 请求体经原生层重发
+                addJavascriptInterface(WebPostBridge(), "WebPostService")
+                val interceptor = WebViewPostInterceptor.get()
                 webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): android.webkit.WebResourceResponse? =
+                        // 桌面模式：主框架 GET 与标记过的 POST 由原生重放（剥 X-Requested-With 特征头）
+                        interceptor.intercept(request, desktop)
+                            .also { if (it == null) android.util.Log.d("JwxtWeb", "pass: ${request.method} ${request.url}") }
+
                     override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                         super.onPageStarted(view, url, favicon)
+                        // 尽早注入：页面自己的脚本发出首个 XHR 前必须已挂上钩子
+                        view.evaluateJavascript(JS_INTERCEPT_POST, null)
                         onPageStarted(view, url)
                     }
 
                     override fun onPageFinished(view: WebView, url: String) {
                         super.onPageFinished(view, url)
                         if (desktop) injectDesktopViewportFix(view)
+                        // 页面跳转/重载会重建 JS 环境，落点时补一次注入（脚本自身幂等）
+                        view.evaluateJavascript(JS_INTERCEPT_POST, null)
                         onPageFinished(view, url)
                     }
 
@@ -104,31 +131,47 @@ fun JwxtWebView(
     )
 }
 
-/** 切换桌面/手机 UA（Cookie 会话保留）。 */
-fun applyDesktopMode(wv: WebView, desktop: Boolean) {
-    wv.settings.userAgentString = if (desktop) DESKTOP_USER_AGENT
-    else android.webkit.WebSettings.getDefaultUserAgent(wv.context)
+/** 切换桌面/手机 UA（Cookie 会话保留；模式差异与拾光 WebCompatDelegate 一致）。 */
+fun applyDesktopMode(wv: WebView, desktop: Boolean, defaultUserAgent: String? = null) {
+    wv.settings.userAgentString = if (desktop) {
+        DESKTOP_USER_AGENT
+    } else {
+        defaultUserAgent ?: android.webkit.WebSettings.getDefaultUserAgent(wv.context)
+    }
+    // 桌面模式放大正文，避免 PC 页在窄屏上文字过小（拾光同款 TEXT_AUTOSIZING）
+    wv.settings.layoutAlgorithm = if (desktop) {
+        android.webkit.WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING
+    } else {
+        android.webkit.WebSettings.LayoutAlgorithm.NORMAL
+    }
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
 }
 
-/** 桌面模式下补 viewport meta 并触发重排（避免 PC 页按 980px 挤压）。 */
+/**
+ * 桌面模式下修 body 高度塌陷。
+ *
+ * 拾光（WebCompatDelegate）不做任何 viewport 注入，本函数同样**不注入、不覆盖 viewport**——
+ * 之前的 `width=1280` 注入是造成超星登录页空白的元凶之一。
+ *
+ * 但 Android WebView 对一个"没有 viewport 声明"的文档，会把根元素高度算成 0；
+ * 而教务站点登录页大量使用 `html,body{height:100%}` + `body{overflow:hidden}`，
+ * 于是 body 高 0、内容被整块裁掉，只剩背景图（hbuas.jw.chaoxing.com 实测：
+ * body 高 0 / `.loginMain` 高 0 / 登录框不可见）。
+ * 这里只在"body 确实高 0 且内部有内容"时补一个 min-height 兜底，页面自身布局正常时不动它。
+ */
 fun injectDesktopViewportFix(wv: WebView) {
     wv.evaluateJavascript(
         """
         (function() {
             try {
-                var metas = document.getElementsByTagName('meta');
-                for (var i = metas.length - 1; i >= 0; i--) {
-                    if (metas[i].getAttribute('name') === 'viewport') {
-                        metas[i].parentNode.removeChild(metas[i]);
-                    }
-                }
-                var meta = document.createElement('meta');
-                meta.name = 'viewport';
-                meta.content = 'width=1280, initial-scale=1.0, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes';
-                document.head.appendChild(meta);
-                window.dispatchEvent(new Event('resize'));
+                var html = document.documentElement;
+                var body = document.body;
+                if (!body) return;
+                if (body.getBoundingClientRect().height >= 1) return;
+                var inner = Math.max(body.scrollHeight || 0, html.scrollHeight || 0);
+                if (inner < 2) return;
+                body.style.minHeight = Math.max(inner, html.clientHeight) + 'px';
             } catch(e) {}
         })();
         """.trimIndent(),

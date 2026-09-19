@@ -14,13 +14,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.buguake.timetable.ui.theme.AppMotion
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -98,8 +101,16 @@ fun ImportWebViewScreen(
     var pendingInject by remember { mutableStateOf(false) }
     // 桌面模式：教务/CAS 页面按 PC 设计，手机 UA 常被拒或排版错乱；默认开启
     var desktopMode by remember { mutableStateOf(true) }
-    // 地址栏：通用适配器无默认入口，用户自行输入教务网址；随页面导航更新
+    // 地址栏：通用适配器没有默认入口，必须由使用者自己填教务网址。
+    // 无默认入口时直接进入编辑态，避免出现"看似空白、不知从何下手"的页面（对齐拾光 WebViewScreen）。
+    var currentUrl by remember { mutableStateOf(adapter.importUrl) }
     var urlInput by remember { mutableStateOf(adapter.importUrl) }
+    var isEditingUrl by remember { mutableStateOf(adapter.importUrl.isBlank()) }
+    var pageTitle by remember { mutableStateOf("") }
+    // 原始 UA（切回手机模式用）；JwxtWebView 建好 WebView 后回填
+    var defaultUserAgent by remember { mutableStateOf<String?>(null) }
+
+    val keyboard = LocalSoftwareKeyboardController.current
 
     fun evaluateJs(script: String, callback: ((String?) -> Unit)?) {
         webViewRef?.evaluateJavascript(script, callback)
@@ -160,16 +171,24 @@ fun ImportWebViewScreen(
     // 目标课表变化同步给 Handler（保存动作以此为作用域）
     LaunchedEffect(importTableId) { handler.importTableId = importTableId }
 
-    // 系统返回：WebView 可后退则先退页面，否则退出导入
+    // 系统返回：先退出地址栏编辑 → WebView 可后退则退页面 → 退出导入
     BackHandler(enabled = true) {
-        val wv = webViewRef
-        if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
+        if (isEditingUrl) {
+            isEditingUrl = false
+            keyboard?.hide()
+        } else {
+            val wv = webViewRef
+            if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
+        }
     }
 
     fun goToUrl(raw: String) {
         val t = raw.trim()
         if (t.isEmpty()) return
         val url = if (t.startsWith("http://") || t.startsWith("https://")) t else "https://$t"
+        keyboard?.hide()
+        currentUrl = url
+        isEditingUrl = false
         webViewRef?.loadUrl(url)
     }
 
@@ -193,23 +212,71 @@ fun ImportWebViewScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        adapter.name.ifBlank { school.name },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (isEditingUrl) {
+                        OutlinedTextField(
+                            value = urlInput,
+                            onValueChange = { urlInput = it },
+                            placeholder = {
+                                Text(
+                                    "输入教务系统网址，如 https://xxx.edu.cn",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                            keyboardActions = KeyboardActions(onGo = { goToUrl(urlInput) }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                        )
+                    } else {
+                        Text(
+                            pageTitle.ifBlank { adapter.name.ifBlank { school.name } },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    IconButton(onClick = {
+                        if (isEditingUrl) {
+                            isEditingUrl = false
+                            keyboard?.hide()
+                        } else {
+                            onBack()
+                        }
+                    }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (isEditingUrl) "取消输入网址" else "返回",
+                        )
                     }
                 },
                 actions = {
+                    if (isEditingUrl) {
+                        IconButton(
+                            onClick = { goToUrl(urlInput) },
+                            enabled = urlInput.trim().isNotBlank() && urlInput.trim() != "https://",
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "打开网址")
+                        }
+                    } else {
+                        // 有默认入口的适配器也要能改网址：教务域名随时可能变更
+                        IconButton(onClick = {
+                            urlInput = currentUrl.takeIf { it.isNotBlank() && it != "about:blank" } ?: urlInput
+                            isEditingUrl = true
+                            keyboard?.show()
+                        }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "输入网址")
+                        }
+                    }
                     // 桌面/手机模式切换：切 UA + 重载（Cookie 会话保留）
-                    IconButton(onClick = {
+                    TextButton(onClick = {
                         desktopMode = !desktopMode
                         webViewRef?.let { wv ->
-                            applyDesktopMode(wv, desktopMode)
+                            applyDesktopMode(wv, desktopMode, defaultUserAgent)
                             wv.reload()
                         }
                     }) {
@@ -267,25 +334,6 @@ fun ImportWebViewScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            // 地址栏：适配器无默认入口（通用适配器）时尤其关键
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = urlInput,
-                    onValueChange = { urlInput = it },
-                    placeholder = { Text("输入教务系统网址", style = MaterialTheme.typography.bodySmall) },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { goToUrl(urlInput) }),
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { goToUrl(urlInput) }) { Text("前往") }
-            }
             androidx.compose.animation.AnimatedVisibility(
                 visible = progress < 100,
                 enter = androidx.compose.animation.expandVertically(com.buguake.timetable.ui.theme.AppMotion.spatial()) +
@@ -311,13 +359,23 @@ fun ImportWebViewScreen(
                 onPageStarted = { view, url ->
                     // 正式包不打印页面地址：教务 URL 常带会话参数
                     if (BuildConfig.DEBUG) android.util.Log.i("WebImport", "页面加载: $url")
-                    urlInput = url
+                    val real = url.takeIf { it.isNotBlank() && it != "about:blank" }
+                    if (real != null) {
+                        currentUrl = real
+                        // 正在编辑时不覆盖用户输入，否则打字会被导航事件打断
+                        if (!isEditingUrl) urlInput = real
+                    }
                     // 新页面 = 新 JS 全局作用域，重复注入守卫复位
                     injectedAtTable = null
                     // 每次导航都确保桥已挂载（脚本幂等）
                     view.evaluateJavascript(JS_BRIDGE_INIT, null)
                 },
                 onPageFinished = { view, _ ->
+                    // 标题栏显示教务页自己的标题（选学期/课表页一眼可辨）
+                    view.evaluateJavascript("document.title") { raw ->
+                        val title = raw?.trim('"')?.replace("\\\"", "\"")?.trim().orEmpty()
+                        if (title.isNotBlank() && title != "null") pageTitle = title
+                    }
                     if (pendingInject) {
                         pendingInject = false
                         // 等页面脚本（jQuery 等）就绪后自动重新注入
@@ -327,6 +385,7 @@ fun ImportWebViewScreen(
                 onHistoryChanged = { view, _ -> view.evaluateJavascript(JS_BRIDGE_INIT, null) },
                 onProgress = { progress = it },
                 onWebView = { webViewRef = it },
+                onDefaultUserAgent = { defaultUserAgent = it },
                 modifier = Modifier.fillMaxSize(),
             )
         }

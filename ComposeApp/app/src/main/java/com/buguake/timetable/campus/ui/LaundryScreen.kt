@@ -264,14 +264,23 @@ fun LaundryDevices(
 
     val currentCategory = categories.getOrNull(selected) ?: categories.firstOrNull()
 
-    /** 把当前内存中的各分类空闲数写入 2×2 小组件数据并刷新桌面上已添加的实例。 */
+    /** 把当前内存中的各分类空闲数写入小组件数据并刷新桌面上已添加的实例。 */
     fun refreshWidget() {
         val rows = categories.mapNotNull { cat ->
             val list = devices[cat.id] ?: return@mapNotNull null
             LaundryWidgetRow(cat.name, list.count { it.status == DeviceStatus.IDLE && it.online }, list.size)
         }
         if (rows.isEmpty()) return
-        store.saveWidgetSnapshot(LaundryWidgetData(house.name, System.currentTimeMillis(), rows))
+        store.saveWidgetSnapshot(
+            LaundryWidgetData(
+                storeId = info.storeId,
+                houseId = house.id,
+                houseName = house.name,
+                updatedAt = System.currentTimeMillis(),
+                rows = rows,
+                categories = categories,
+            ),
+        )
         LaundryWidgetProvider.updateAll(context)
     }
 

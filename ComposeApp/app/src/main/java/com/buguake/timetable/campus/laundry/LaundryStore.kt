@@ -4,14 +4,20 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** 2×2 洗衣房小组件的一行：分类名 + 空闲数 + 总数。 */
+/** 洗衣房小组件的一行：分类名 + 空闲数 + 总数。 */
 data class LaundryWidgetRow(val name: String, val idle: Int, val total: Int)
 
-/** 2×2 洗衣房小组件数据：上次浏览的楼栋与各分类空闲数（App 内刷新时写入）。 */
+/**
+ * 洗衣房小组件数据：上次浏览的楼栋与各分类空闲数。
+ * 另带 storeId/houseId/分类表，供小组件周期刷新时直接拉取设备状态（不依赖应用进程）。
+ */
 data class LaundryWidgetData(
+    val storeId: Int,
+    val houseId: Int,
     val houseName: String,
     val updatedAt: Long,
     val rows: List<LaundryWidgetRow>,
+    val categories: List<LaundryCategory> = emptyList(),
 )
 
 /**
@@ -166,19 +172,26 @@ class LaundryStore private constructor(context: Context) {
         return devices to o.optLong("at", 0L)
     }
 
-    // ---- 2×2 小组件数据（App 内每次刷新设备后写入）----
+    // ---- 小组件数据（App 内每次刷新设备后写入；小组件周期刷新时读取并拉新）----
 
     fun saveWidgetSnapshot(data: LaundryWidgetData) {
         val rows = JSONArray()
         data.rows.forEach {
             rows.put(JSONObject().put("name", it.name).put("idle", it.idle).put("total", it.total))
         }
+        val cats = JSONArray()
+        data.categories.forEach {
+            cats.put(JSONObject().put("id", it.id).put("name", it.name))
+        }
         prefs.edit().putString(
             K_WIDGET,
             JSONObject()
+                .put("storeId", data.storeId)
+                .put("houseId", data.houseId)
                 .put("houseName", data.houseName)
                 .put("at", data.updatedAt)
                 .put("rows", rows)
+                .put("categories", cats)
                 .toString(),
         ).apply()
     }
@@ -194,7 +207,20 @@ class LaundryStore private constructor(context: Context) {
                 }.getOrNull()
             }
         } ?: return null
-        return LaundryWidgetData(o.optString("houseName"), o.optLong("at", 0L), rows)
+        val cats = o.optJSONArray("categories")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                runCatching { arr.getJSONObject(i) }.getOrNull()
+                    ?.let { LaundryCategory(it.optInt("id"), it.optString("name")) }
+            }
+        }.orEmpty()
+        return LaundryWidgetData(
+            storeId = o.optInt("storeId"),
+            houseId = o.optInt("houseId"),
+            houseName = o.optString("houseName"),
+            updatedAt = o.optLong("at", 0L),
+            rows = rows,
+            categories = cats,
+        )
     }
 
     // ---- 编解码 ----

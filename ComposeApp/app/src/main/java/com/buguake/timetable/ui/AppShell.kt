@@ -529,25 +529,35 @@ private data class MoveReq(
     val confirmNewTimetable: (String, Long?) -> Unit = { name, copyFrom ->
         showNewTimetableDialog = false
         showTimetableManage = false
-        if (copyFrom != null) {
-            // 复制现有课表：结构原样复制，周次重置整学期
-            scope.launch {
-                val result = runCatching {
-                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+        // copyFrom == null 是「空白课表」来源，必须真的建表：
+        // 这里曾经只有 copyFrom != null 的分支，空白来源整个是空实现——
+        // 弹窗关掉了却什么都没建，表现为"选空白课表没反应"。
+        scope.launch {
+            val result = runCatching {
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    if (copyFrom != null) {
+                        // 复制现有课表：结构原样复制，周次重置整学期
                         val src = scheduleRepo.getTimetable(copyFrom)
                             ?: throw IllegalStateException("源课表不存在")
                         scheduleRepo.copyTimetable(
                             src, name.ifBlank { "未命名" }, src.startMillis, src.totalWeeks,
                         )
+                    } else {
+                        // 空白课表：用全局学期设置作为开学日与周数
+                        scheduleRepo.createTimetable(
+                            name.ifBlank { "未命名" },
+                            settings.semesterStart,
+                            settings.totalWeeks,
+                        )
                     }
                 }
-                result.onSuccess { id ->
-                    settingsRepo.setActiveTimetable(id)
-                    AppRefresh.onDataChanged(context)
-                    showSnackbar("已创建《${name.ifBlank { "未命名" }}》")
-                }.onFailure { e ->
-                    showSnackbar("创建失败：${e.message ?: "未知错误"}")
-                }
+            }
+            result.onSuccess { id ->
+                settingsRepo.setActiveTimetable(id)
+                AppRefresh.onDataChanged(context)
+                showSnackbar("已创建《${name.ifBlank { "未命名" }}》")
+            }.onFailure { e ->
+                showSnackbar("创建失败：${e.message ?: "未知错误"}")
             }
         }
     }

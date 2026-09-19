@@ -24,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -198,7 +200,12 @@ fun ImportWebViewScreen(
     }
 
     fun injectAdapter() {
-        val tableId = importTableId ?: run { showTablePicker = true; return }
+        val tableId = importTableId ?: run {
+            android.util.Log.i("TimetableCreate", "injectAdapter：importTableId 为空 → 打开课表选择弹窗")
+            showTablePicker = true
+            return
+        }
+        android.util.Log.i("TimetableCreate", "injectAdapter tableId=$tableId currentUrl=$currentUrl")
         if (injectedAtTable != null) {
             android.util.Log.i("WebImport", "同页重复注入：先重载页面再自动执行")
             pendingInject = true
@@ -416,6 +423,7 @@ fun ImportWebViewScreen(
             defaultStartMillis = defaultStartMillis,
             defaultTotalWeeks = defaultTotalWeeks,
             onPick = { id ->
+                android.util.Log.i("TimetableCreate", "onPick id=$id → 关闭弹窗并注入适配器")
                 importTableId = id
                 showTablePicker = false
                 injectAdapter()
@@ -572,6 +580,17 @@ private fun TablePickerDialog(
     var newName by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    val nameFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    // 进入「新建」模式即聚焦名称输入框并弹键盘：否则用户看不出"要先填名字"，
+    // 直接点确认只会得到一句不起眼的错误提示，表现为"点了没反应"。
+    LaunchedEffect(mode) {
+        if (mode == PickerMode.CREATE && !busy) {
+            nameFocus.requestFocus()
+            keyboard?.show()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
@@ -601,11 +620,19 @@ private fun TablePickerDialog(
                             placeholder = { Text("如：2026 春 个人课表") },
                             isError = error != null,
                             supportingText = {
-                                Text(error ?: "课表先建好，随后点「执行导入」拉取课程")
+                                Text(
+                                    error ?: "填好名称后点右下角「创建并导入」",
+                                    color = if (error != null) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             },
                             singleLine = true,
                             enabled = !busy,
-                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(nameFocus),
                         )
                     }
 
@@ -668,13 +695,21 @@ private fun TablePickerDialog(
         confirmButton = {
             TextButton(
                 onClick = {
+                    android.util.Log.i(
+                        "TimetableCreate",
+                        "确认点击 mode=$mode name='${newName.trim()}' busy=$busy timetables=${timetables.size}",
+                    )
                     when (mode) {
                         PickerMode.EXISTING -> existingId?.let(onPick) ?: run { error = "请选择一个课表" }
 
                         PickerMode.CREATE -> {
                             val name = newName.trim()
                             if (name.isEmpty()) {
-                                error = "请输入课表名称"
+                                // 不能只写一句提示就返回：焦点要落回输入框、键盘要弹出来，
+                                // 否则用户看到的就是"点了一下，什么都没发生"
+                                error = "请先输入新课表名称"
+                                nameFocus.requestFocus()
+                                keyboard?.show()
                                 return@TextButton
                             }
                             busy = true
@@ -688,12 +723,15 @@ private fun TablePickerDialog(
                                 }
                                 busy = false
                                 result.onSuccess { id ->
+                                    android.util.Log.i("TimetableCreate", "新建课表成功 id=$id name=$name")
                                     // 新建的课表设为活动课表，否则用户看不到任何变化（表现为"没反应"）
-                                    settingsRepo.setActiveTimetable(id)
+                                    runCatching { settingsRepo.setActiveTimetable(id) }
+                                        .onFailure { android.util.Log.w("TimetableCreate", "设为活动课表失败", it) }
                                     AppRefresh.onDataChanged(context)
                                     onCreated(id, name)
                                     onPick(id)
                                 }.onFailure { e ->
+                                    android.util.Log.w("TimetableCreate", "新建课表失败", e)
                                     error = "创建失败：${e.message ?: "未知错误"}"
                                 }
                             }

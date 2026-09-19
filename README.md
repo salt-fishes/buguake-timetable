@@ -1,15 +1,13 @@
 # 不挂科课表
 
-[![Android CI](https://github.com/salt-fishes/buguake-timetable/actions/workflows/android-ci.yml/badge.svg)](https://github.com/salt-fishes/buguake-timetable/actions/workflows/android-ci.yml)
-
 从"简课表"进化而来的 Android 课表应用：**教务网页一键导入** + **宿舍蓝牙开门**。
 导入适配由开源社区生态驱动，无需手写解析规则。
 
-> 当前版本 **v1.4**｜支持 Android 8.0 及以上｜JDK 17 + Android SDK 35 构建
+> 当前版本 **v1.5**｜支持 Android 8.0 及以上｜JDK 17 + Android SDK 35 构建
 
-> v1.4 亮点：宿舍开门页整页重构（修复文字重叠）；快捷方式快速开锁只触发一次；
-> 全部二级/三级页面统一进出场转场并支持边缘侧滑返回；
-> 全应用细节动效与触感反馈补全；首页周次滑动抖动修复，周数滑杆限定学期内而手动滑页不受限。
+> v1.5 亮点：校园页新增「洗衣房」——门店可搜索 / 按附近选择，看洗衣机、烘干机哪台空着，
+> 剩余时间实时倒计时、空闲的排前面，一键跳官方小程序开洗（无需登录、不上传数据）；
+> 新增 2×1「洗衣房」桌面小组件与长按快捷方式，点击直达上次浏览的楼栋设备页。
 
 ## 功能
 
@@ -32,19 +30,20 @@
 
 ## 下载与构建
 
-前往 [Releases](https://github.com/salt-fishes/buguake-timetable/releases) 下载最新 APK；自行构建：
+前往 [Releases](https://github.com/salt-fishes/buguake-timetable/releases) 下载最新 APK；发版与构建全部在本地完成：
 
 ```bash
+# 一键发版：自动更新版本号/about.html 更新记录/README → 本地测试与签名构建 → 打 tag → 创建 Release 上传 APK
+./release.ps1 -Version 1.6 -Notes @("新增XXX", "修复YYY")
+
+# 只构建不发包
 cd ComposeApp
 ./gradlew :app:assembleDebug        # 调试包
 ./gradlew :app:assembleRelease      # 正式包（未配置签名时为 unsigned）
 ./gradlew :app:testDebugUnitTest    # 单元测试
 ```
 
-要求 JDK 17 + Android SDK 35。推送 `v*` 标签（如 `v1.1`）会触发
-[Release workflow](.github/workflows/android-release.yml) 自动构建并上传签名 APK，
-需在仓库 Secrets 中配置 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`
-（未配置时该 job 会跳过签名打包并给出提示，不会失败）。
+要求 JDK 17 + Android SDK 35，Release 上传需要 `gh` CLI（`gh auth login`）。
 
 本地签名打包：在仓库根放 `keystore.properties`（`storeFile=keystore/buguake.jks`、`storePassword`、`keyAlias`、`keyPassword`）
 与 `keystore/buguake.jks`，两者均已被 `.gitignore` 排除、不会入库；随后 `./gradlew :app:assembleRelease` 即产出已签名 APK。
@@ -64,7 +63,7 @@ cd ComposeApp
 2. **只反馈问题也可以**：在本仓库提 Issue，附上**教务系统网址、学校名称、失败截图或日志**
    （内嵌浏览器页面里可长按复制报错），我们负责复现并同步到上游。
 3. **客户端改进**：代码、界面、文案、性能、文档都欢迎提 PR；提交前请先跑
-   `./gradlew :app:testDebugUnitTest`（CI 也会执行同样的检查）。
+   `./gradlew :app:testDebugUnitTest`。
 
 > 说明：本项目当前默认导入源指向拾光官方仓库（过渡期），
 > 自有 fork [salt-fishes/shiguang_warehouse](https://github.com/salt-fishes/shiguang_warehouse)

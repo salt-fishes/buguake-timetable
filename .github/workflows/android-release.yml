@@ -23,6 +23,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 默认值含已下架的 "tools" 包（sdkmanager 必失败）；AGP 会按需自动补齐平台与构建工具
+          packages: platform-tools
 
       # 签名材料只放在仓库 Secrets；未配置时跳过打包而不是让 workflow 失败
       # （本地已用同一套 keystore 打过签名包，可手动上传到 Release）

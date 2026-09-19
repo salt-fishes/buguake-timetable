@@ -24,6 +24,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 默认值含已下架的 "tools" 包（sdkmanager 必失败）；AGP 会按需自动补齐平台与构建工具
+          packages: platform-tools
 
       - name: Unit tests + debug build
         working-directory: ComposeApp

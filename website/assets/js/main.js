@@ -47,7 +47,10 @@
     });
   }
 
-  /* ---------- Hero 入场时间线（v4: createTimeline，位置用绝对毫秒） ---------- */
+  /* ---------- Hero 入场（分组 setTimeout + anime.animate） ----------
+     不用 v4 的 Timeline API：4.5 上 createTimeline 的子动画不自动播放（实测静默两秒），
+     已两次踩坑；anime.animate 是滚动揭示/数字动画验证过的可靠原语，用它手工编排顺序：
+     徽章(0) → 标题(300) → 描述/按钮/徽章片(640) → 手机(700) → 小组件(1150) → 开门卡(1300) */
   function heroEntrance() {
     var badge = document.getElementById('heroBadge');
     var phone = document.getElementById('heroPhone');
@@ -58,52 +61,72 @@
     var counter = document.querySelector('[data-count]');
     if (!badge && !phone && !titleLines.length && !rest.length && !counter) return;
 
-    var tl = anime.createTimeline({ defaults: { ease: 'out(3)', duration: 600 } });
-    if (badge) tl.add({
-      targets: badge, opacity: [0, 1], translateY: [16, 0], rotate: ['-6deg', '-1.5deg']
-    }, 0);
-    if (titleLines.length) tl.add({
-      targets: titleLines, opacity: [0, 1], translateY: [28, 0],
-      delay: anime.stagger(80), duration: 550
-    }, 280);
-    if (rest.length) tl.add({
-      targets: rest, opacity: [0, 1], translateY: [18, 0],
-      delay: anime.stagger(70), duration: 550
-    }, 520);
-    if (phone) tl.add({
-      targets: phone, opacity: [0, 1], translateY: [46, 0], rotate: ['6deg', '2deg'],
-      duration: 850, ease: 'out(4)'
-    }, 560);
-    if (widget) tl.add({
-      targets: widget, opacity: [0, 1], translateY: [-22, 0], rotate: ['-9deg', '-3deg'],
-      duration: 650
-    }, 1000);
-    if (door) tl.add({
-      targets: door, opacity: [0, 1], translateX: [-26, 0], rotate: ['-9deg', '-2.5deg'],
-      duration: 650
-    }, 1100);
+    // 编排原语：delay 毫秒后启动一组动画，动画结束（或最迟 duration+700ms）强制显示
+    function stage(delay, targets, params) {
+      if (!targets || (targets.length === 0 && !targets.style) && !targets.getAttribute) return;
+      var list = targets.length !== undefined && typeof targets !== 'string'
+        ? Array.prototype.slice.call(targets) : [targets];
+      list = list.filter(Boolean);
+      if (!list.length) return;
+      later(function () {
+        try {
+          anime.animate(Object.assign({ targets: list }, params));
+        } catch (e) {
+          list.forEach(reveal);
+          return;
+        }
+        later(function () { list.forEach(reveal); }, (params.duration || 550) + 200);
+      }, delay);
+    }
 
+    stage(0, badge, {
+      opacity: [0, 1], translateY: [16, 0], rotate: ['-6deg', '-1.5deg'],
+      duration: 600, ease: 'out(3)'
+    });
+    stage(300, titleLines, {
+      opacity: [0, 1], translateY: [28, 0], duration: 550,
+      delay: anime.stagger(90), ease: 'out(3)'
+    });
+    stage(640, rest, {
+      opacity: [0, 1], translateY: [18, 0], duration: 520,
+      delay: anime.stagger(80), ease: 'out(3)'
+    });
+    stage(700, phone, {
+      opacity: [0, 1], translateY: [46, 0], rotate: ['6deg', '2deg'],
+      duration: 850, ease: 'out(4)'
+    });
+    stage(1150, widget, {
+      opacity: [0, 1], translateY: [-22, 0], rotate: ['-9deg', '-3deg'],
+      duration: 650, ease: 'out(3)'
+    });
+    stage(1300, door, {
+      opacity: [0, 1], translateX: [-26, 0], rotate: ['-9deg', '-2.5deg'],
+      duration: 650, ease: 'out(3)'
+    });
+
+    // 全场兜底：约 2.4s 后无论哪一环出问题都强制显示
     var heroEls = [badge, phone, widget, door].concat(
       Array.prototype.slice.call(titleLines),
       Array.prototype.slice.call(rest)
-    );
-    tl.complete(function () {
-      heroEls.forEach(reveal);
-    });
-    // 兜底：无论 complete 是否回调，约 2s 后强制显示
-    later(function () { heroEls.forEach(reveal); }, 2200);
+    ).filter(Boolean);
+    later(function () { heroEls.forEach(reveal); }, 2400);
 
-    // 数字 count-up：200+
+    // 数字 count-up：200+（跟在描述文字之后，550ms 起跳）
     if (counter) {
       var target = parseInt(counter.getAttribute('data-count'), 10) || 0;
       var obj = { v: 0 };
+      later(function () {
+        counter.textContent = '0+';
+        try {
+          anime.animate(obj, {
+            v: target, duration: 1400, ease: 'out(3)',
+            onUpdate: function () { counter.textContent = Math.round(obj.v) + '+'; },
+            onComplete: function () { counter.textContent = target + '+'; }
+          });
+        } catch (e) { counter.textContent = target + '+'; }
+        later(function () { counter.textContent = target + '+'; }, 1700);
+      }, 550);
       counter.textContent = '0+';
-      anime.animate(obj, {
-        v: target, duration: 1500, delay: 500, ease: 'out(3)',
-        onUpdate: function () { counter.textContent = Math.round(obj.v) + '+'; },
-        onComplete: function () { counter.textContent = target + '+'; }
-      });
-      later(function () { counter.textContent = target + '+'; }, 2600);
     }
   }
 

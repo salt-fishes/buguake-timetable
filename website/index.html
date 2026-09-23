@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>不挂科课表 — 教务一键导入 + 宿舍蓝牙开门的 Android 课表应用</title>
+<meta name="description" content="不挂科课表：选学校、登教务、一键导入课表（200+ 学校），宿舍蓝牙开门、考试安排、洗衣房空闲查询。免费开源，无广告无埋点，数据只留在你的手机上。">
+<meta property="og:title" content="不挂科课表 — 课表和门锁都别挂科">
+<meta property="og:description" content="教务网页一键导入 + 宿舍蓝牙开门 + 洗衣房/考试安排。免费开源的 Android 课表应用。">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#333464">
+<link rel="icon" type="image/png" href="assets/img/icon-192.png">
+<link rel="apple-touch-icon" href="assets/img/icon-192.png">
+<link rel="stylesheet" href="assets/css/main.css">
+<script>if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('js-anim');setTimeout(function(){if(!window.__siteReady)document.documentElement.classList.remove('js-anim')},5000)}</script>
+</head>
+<body>
+
+<!-- ===== 导航 ===== -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="index.html">
+      <img src="assets/img/icon-192.png" alt="不挂科课表图标" width="30" height="30">
+      不挂科课表
+    </a>
+    <span class="badge-red">免费 · 开源 · MIT</span>
+    <button class="nav-burger" id="navBurger" aria-label="打开菜单" aria-expanded="false">菜单</button>
+    <nav class="nav-links" id="navLinks">
+      <a href="#features">功能</a>
+      <a href="#download">下载</a>
+      <a href="changelog.html">更新日志</a>
+      <a href="faq.html">常见问题</a>
+      <a href="#contribute">参与贡献</a>
+    </nav>
+    <a class="btn btn-nav nav-cta" href="#download">下载 APK ↓</a>
+  </div>
+</header>
+
+<main>
+<!-- ===== Hero ===== -->
+<section class="wrap hero">
+  <div class="hero-copy">
+    <span class="badge anim" id="heroBadge">🌐 选学校 → 登教务 → 一键导入</span>
+    <h1 class="hero-title">
+      <span class="anim" style="display:block">这学期，</span>
+      <span class="anim" style="display:block"><span class="hl-pen">课表和门锁都别挂科</span></span>
+    </h1>
+    <p class="hero-desc anim">教务网页一键导入课表，覆盖 <strong data-count="200">200+</strong> 学校；回宿舍蓝牙一碰开门。<br>
+      还有考试安排、洗衣房空闲查询——都在一个 App 里。</p>
+    <div class="hero-cta anim">
+      <a class="btn btn-primary" href="https://github.com/salt-fishes/buguake-timetable/releases/latest" data-latest-download>下载 v1.5.1</a>
+      <a class="btn" href="changelog.html">查看更新日志</a>
+      <span class="hero-note">Android 8.0+ · arm64 · 免费</span>
+    </div>
+    <div class="hero-chips anim">
+      <span class="chip">📖 MIT 开源</span>
+      <span class="chip">🔒 无广告 · 无埋点</span>
+      <span class="chip">🌱 源自「简课表」</span>
+    </div>
+  </div>
+
+  <div class="hero-art">
+    <!-- 大手机 · 周视图 -->
+    <div class="phone anim" id="heroPhone" aria-hidden="true">
+      <div class="phone-status"><span>9:41</span><span>📶 🔋</span></div>
+      <div class="phone-head">
+        <span class="phone-week">第 3 周</span>
+        <span class="phone-date">9.14 – 9.20</span>
+        <span class="phone-tools">分享 ＋ 周次 ▾</span>
+      </div>
+      <div class="pg-row pg-head" style="margin-bottom:6px">
+        <span></span><span>一</span><span><b>二</b></span><span>三</span><span>四</span><span>五</span>
+      </div>
+      <div class="phone-grid">
+        <div class="pg-row">
+          <span class="pg-axis">1-2<br>8:00</span>
+          <span class="pg-cell pg-blue">数据结构<small>B204</small></span>
+          <span class="pg-cell pg-orange">高数<small>2-305</small></span>
+          <span class="pg-cell pg-empty"></span>
+          <span class="pg-cell pg-green">英语<small>A301</small></span>
+          <span class="pg-cell pg-empty"></span>
+        </div>
+        <div class="pg-row">
+          <span class="pg-axis">3-4<br>9:50</span>
+          <span class="pg-cell pg-purple">物理<small>1-108</small></span>
+          <span class="pg-cell pg-orange">高数<i class="pg-now"></i><small>2-305</small></span>
+          <span class="pg-cell pg-yellow">Web 前端<small>机房2</small></span>
+          <span class="pg-cell pg-empty"></span>
+          <span class="pg-cell pg-blue">数据结构<small>B204</small></span>
+        </div>
+        <div class="pg-row">
+          <span class="pg-axis">5-6<br>13:30</span>
+          <span class="pg-cell pg-empty"></span>
+          <span class="pg-cell pg-green">形策<small>阶301</small></span>
+          <span class="pg-cell pg-purple pg-cont-top">物理实验<small>连堂 · 14:00</small></span>
+          <span class="pg-cell pg-empty"></span>
+          <span class="pg-cell pg-empty"></span>
+        </div>
+        <div class="pg-row">
+          <span class="pg-axis">7-8<br>15:20</span>
+          <span class="pg-cell pg-yellow">Web 前端<small>机房2</small></span>
+          <span class="pg-cell pg-empty"></span>
+          <span class="pg-cell pg-purple pg-cont-bot">↑ 续 · 至 16:50</span>
+          <span class="pg-cell pg-blue">大学英语<small>A301</small></span>
+          <span class="pg-cell pg-orange">高数<small>2-305</small></span>
+        </div>
+      </div>
+      <div class="phone-tabs">
+        <span class="on">课表</span><span>今日</span><span>校园</span><span>我的</span>
+      </div>
+    </div>
+
+    <!-- 悬浮：桌面小组件 -->
+    <aside class="float-card float-widget anim" id="heroWidget" aria-hidden="true">
+      <div class="fw-label">📱 桌面小组件 · 4×2</div>
+      <div class="fw-day">今天 · 周二</div>
+      <div class="fw-course pg-orange">3-4节 高等数学 <span style="color:var(--c-orange-fg)">2-305</span></div>
+      <div class="fw-course pg-yellow">5-6节 Web 前端 <span style="color:var(--c-yellow-fg)">机房2</span></div>
+      <div class="fw-more">明天：数据结构 · 物理实验 →</div>
+    </aside>
+
+    <!-- 悬浮：蓝牙开门 -->
+    <aside class="float-card float-door anim" id="heroDoor" aria-hidden="true">
+      <div class="fd-label">🚪 宿舍门 · 6 栋 312</div>
+      <div class="fd-row">
+        <span class="fd-icon">🔓</span>
+        <span>
+          <span class="fd-title">长按开锁</span><br>
+          <span class="fd-sub">密钥已存本机 · 无需联网</span>
+        </span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ===== 三大特色 ===== -->
+<section class="wrap section" id="features">
+  <p class="eyebrow anim">HIGHLIGHTS · 三大特色</p>
+  <h2 class="h2 anim">不只是课表，<span class="mark">是校园生活工具箱</span></h2>
+  <div class="hl-grid">
+    <article class="hl-card sticker sticker-lg main anim">
+      <div class="icon">🌐</div>
+      <h3>教务网页一键导入</h3>
+      <p>选择学校（200+ 覆盖）→ 内嵌浏览器登录教务 → 课程/周次/节次/地点一键导入。正方、超星、青果、URP 通用适配器，输入本校网址即可。</p>
+    </article>
+    <article class="hl-card sticker sticker-lg anim">
+      <div class="icon">🚪</div>
+      <h3>宿舍蓝牙开门</h3>
+      <p>登录一次，门锁密钥加密存本机；日常开门不再联网、不再重复登录。支持指纹/面容验证、长按图标快速开锁。</p>
+    </article>
+    <article class="hl-card sticker sticker-lg anim">
+      <div class="icon">🧺</div>
+      <h3>洗衣房空闲查询</h3>
+      <p>哪台洗衣机空着、还剩多久实时倒计时，空闲的排前面；一键跳官方小程序开洗。无需登录、不上传数据。</p>
+    </article>
+  </div>
+</section>
+
+<!-- ===== 更多功能 ===== -->
+<section class="wrap section">
+  <p class="eyebrow anim">MORE · 还有这些</p>
+  <div class="feat-grid">
+    <article class="feat sticker anim"><div class="icon">📝</div><h3>考试安排</h3>
+      <p>应用内登录正方教务，读取考试时间/考场/座位，写入日历或导出 .ics，本机加密缓存。</p></article>
+    <article class="feat sticker anim"><div class="icon">📊</div><h3>周视图 / 今日页</h3>
+      <p>滑动切周、当前时间线、自定义时间段课次自动落格。</p></article>
+    <article class="feat sticker anim"><div class="icon">✏️</div><h3>拖拽调课</h3>
+      <p>长按拖拽换位，可选「以后每周」或「仅本周」。</p></article>
+    <article class="feat sticker anim"><div class="icon">📱</div><h3>桌面小组件</h3>
+      <p>课程 2×2 / 3×2 / 4×2（今明双栏）＋ 洗衣房 2×1 空闲速览。</p></article>
+    <article class="feat sticker anim"><div class="icon">🔔</div><h3>上课提醒</h3>
+      <p>课前 5/10/15/20 分钟本地通知，准点触发、重启自动恢复。</p></article>
+    <article class="feat sticker anim"><div class="icon">🗓</div><h3>日历同步</h3>
+      <p>课程写入「不挂科课表」、考试写入「不挂科考试」，可分别清空。</p></article>
+    <article class="feat sticker anim"><div class="icon">🆚</div><h3>课表对比</h3>
+      <p>截图识别占用，找共同空闲（实验性）。</p></article>
+    <article class="feat sticker anim"><div class="icon">🎨</div><h3>个性化</h3>
+      <p>深色模式、动态取色、磨砂玻璃、自定义背景。</p></article>
+  </div>
+
+  <!-- 隐私横幅 -->
+  <div class="privacy-band anim">
+    <div class="icon">🧿</div>
+    <div class="pb-body">
+      <h3>你的数据，只留在你的手机上</h3>
+      <p>课表全部本地存储；教务账号密码只在内嵌浏览器会话内使用，云莓凭据与门锁密钥经 Android Keystore AES-256/GCM 加密存本机；洗衣房查询无需登录。无广告、无统计埋点，卸载即删除全部本地数据。</p>
+    </div>
+    <a class="btn" href="privacy.html">隐私政策全文 →</a>
+  </div>
+</section>
+
+<!-- ===== 下载 ===== -->
+<section class="wrap section" id="download">
+  <p class="eyebrow anim">DOWNLOAD · 下载安装</p>
+  <h2 class="h2 anim">最新稳定版 <span class="ver-badge" data-latest-badge>v1.5.1</span></h2>
+  <div class="dl-card sticker sticker-lg anim">
+    <div class="dl-main">
+      <p class="dl-title">不挂科课表 <span data-latest-text>v1.5.1</span>（versionCode 9）</p>
+      <p class="dl-desc">支持 Android 8.0 及以上 · arm64-v8a · 签名发布<br>
+        安装包可从 GitHub Releases 直接下载；升级覆盖安装不丢数据。</p>
+      <div class="dl-actions">
+        <a class="btn btn-primary" href="https://github.com/salt-fishes/buguake-timetable/releases/latest" data-latest-download>⬇ 下载 APK</a>
+        <a class="btn" href="https://github.com/salt-fishes/buguake-timetable/releases">历史版本 ↗</a>
+      </div>
+    </div>
+    <aside class="dl-notes">
+      <b>v1.5 亮点</b><br>
+      ✨ 校园页新增「洗衣房」<br>
+      ✨ 2×1 洗衣房小组件<br>
+      🔧 修复超星登录页打不开<br>
+      ⚡ 启动速度优化
+    </aside>
+  </div>
+</section>
+
+<!-- ===== 更新日志 + FAQ ===== -->
+<section class="wrap section" id="changelog">
+  <div class="duo">
+    <div class="panel sticker anim">
+      <div class="panel-head"><span class="icon">🗞</span><h3>更新日志</h3><span class="meta">自动同步 GitHub Releases</span></div>
+      <div class="log-list" id="logPreview">
+        <div class="log-item"><span class="ver">v1.5.1</span><span class="date">2026-09-19</span>
+          <div class="desc">修复空白课表不生效 · 课表管理「从教务导入」入口</div></div>
+        <div class="log-item"><span class="ver">v1.5</span><span class="date">2026-09-19</span>
+          <div class="desc">洗衣房 · 2×1 洗衣小组件 · 超星登录修复 · 启动优化</div></div>
+        <div class="log-item"><span class="ver">v1.4</span><span class="date">2026-09-12</span>
+          <div class="desc">开门页重构 · 悬浮岛底栏 · 转场动效升级</div></div>
+      </div>
+      <a class="more-link" href="changelog.html">查看全部版本 →</a>
+    </div>
+
+    <div class="panel sticker anim">
+      <div class="panel-head"><span class="icon">❓</span><h3>常见问题</h3></div>
+      <div class="faq-mini">
+        <a class="q" href="faq.html#q1">我们学校不在列表里怎么办？→ 通用适配器 / 反馈</a>
+        <a class="q" href="faq.html#q2">适配突然失效了？→ 社区生态与修复流程</a>
+        <a class="q" href="faq.html#q3">和「简课表」什么关系？→ 派生自同一作者前作</a>
+        <a class="q" href="faq.html#q6">考试安排支持哪些学校？→ 当前正方教务适配</a>
+      </div>
+      <a class="more-link" href="faq.html">全部问题 →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 参与贡献 ===== -->
+<section class="wrap section" id="contribute">
+  <div class="contribute sticker sticker-lg anim">
+    <div class="contribute-inner">
+      <div class="contribute-copy">
+        <h2>🙌 为你的学校适配出一份力</h2>
+        <p>教务导入能力完全建立在开源适配生态上——适配器是 JavaScript 脚本 + 学校索引，<strong>新增一所学校不用改客户端代码</strong>，非常适合作为第一次贡献。</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-sm" href="https://github.com/XingHeYuZhuan/shiguang_warehouse" style="color:var(--hl)">去适配仓库提 PR ↗</a>
+          <a class="btn btn-sm" href="https://github.com/salt-fishes/buguake-timetable/issues">反馈问题 ↗</a>
+        </div>
+      </div>
+      <div class="contribute-steps">
+        <div class="step"><b>① 新增/修复学校适配</b> → 拾光适配仓库提 Issue/PR</div>
+        <div class="step"><b>② 只反馈问题</b> → 本仓库 Issue，附网址与截图</div>
+        <div class="step"><b>③ 客户端改进</b> → 代码/界面/文案 PR 欢迎</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 免责声明 ===== -->
+<section class="wrap" style="padding-top:34px">
+  <p class="disclaimer anim">⚠️ <b>免责声明</b>：教务导入与宿舍开门基于第三方逆向接口，可能随官方系统更新失效；洗衣房基于顺水平台。请仅用于个人课表管理与开门等合法用途。本项目与任何教务厂商、云莓智能、顺水平台官方均无关联。</p>
+</section>
+
+<!-- ===== 开源致谢 ===== -->
+<section class="wrap section" id="about">
+  <div class="credits-card sticker sticker-lg anim">
+    <h2>🛠 由开源世界构建</h2>
+    <p>特别感谢拾光课程表生态（shiguangschedule、shiguang_warehouse）与云莓不智能（yunmei_unintelligent）的协议研究；以及 Jetpack Compose、PaddleOCR 等开源项目。MIT 协议开源。</p>
+    <div class="credit-chips">
+      <a href="https://github.com/XingHeYuZhuan/shiguangschedule" target="_blank" rel="noopener">shiguangschedule</a>
+      <a href="https://github.com/XingHeYuZhuan/shiguang_warehouse" target="_blank" rel="noopener">shiguang_warehouse</a>
+      <a href="https://github.com/zxy19/yunmei_unintelligent" target="_blank" rel="noopener">yunmei_unintelligent</a>
+      <span>Jetpack Compose</span><span>Material 3</span><span>anime.js</span>
+    </div>
+    <div class="credits-actions">
+      <a class="btn btn-primary btn-sm" href="https://github.com/salt-fishes/buguake-timetable">GitHub 仓库 ↗</a>
+      <a class="btn btn-sm" href="https://github.com/salt-fishes/buguake-timetable/issues">提交 Issue ↗</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- ===== 页脚 ===== -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="name"><img src="assets/img/icon-192.png" alt="">不挂科课表</div>
+        <p>教务一键导入 + 宿舍蓝牙开门的 Android 课表应用<br>免费 · 开源 · 无广告</p>
+      </div>
+      <div class="footer-col"><b>产品</b>
+        <a href="#features">功能特性</a><a href="#download">下载安装</a><a href="changelog.html">更新日志</a>
+      </div>
+      <div class="footer-col"><b>支持</b>
+        <a href="faq.html">常见问题</a><a href="privacy.html">隐私政策</a><a href="https://github.com/salt-fishes/buguake-timetable/issues">适配反馈</a>
+      </div>
+      <div class="footer-col"><b>开源</b>
+        <a href="https://github.com/salt-fishes/buguake-timetable">GitHub</a><a href="#contribute">参与贡献</a>
+        <a href="https://github.com/salt-fishes/buguake-timetable/blob/main/THIRD_PARTY_NOTICES.md">第三方声明</a>
+        <a href="https://github.com/salt-fishes/buguake-timetable/blob/main/LICENSE">MIT 许可</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 咸鱼 (salt-fishes) · MIT License</span>
+      <span>反馈：GitHub Issues · <a href="mailto:xunguang255@163.com">xunguang255@163.com</a></span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/anime.min.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>

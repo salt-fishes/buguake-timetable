@@ -32,7 +32,9 @@
 
 ## 下载与构建
 
-前往 [Releases](https://github.com/salt-fishes/buguake-timetable/releases) 下载最新 APK；发版与构建全部在本地完成：
+前往 [Releases](https://github.com/salt-fishes/buguake-timetable/releases) 下载最新 APK，
+或到**官网 <http://8.133.174.78>** 查看功能介绍 / 更新日志 / 常见问题 / 隐私政策（源码在仓库 `website/`，
+发版后运行 `website/tools/deploy.ps1` 同步更新）；发版与构建全部在本地完成：
 
 ```bash
 # 一键发版：自动更新版本号/about.html 更新记录/README → 本地测试与签名构建 → 打 tag → 创建 Release 上传 APK

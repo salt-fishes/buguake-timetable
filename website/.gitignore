@@ -1,0 +1,6 @@
+# sync 的临时抓取产物（Releases 原始 JSON、npm tarball 解包等）
+tools/.tmp/
+
+# 根 .gitignore 的全局 *.png 忽略在此作废：官网图标必须入库
+!assets/img/*.png
+

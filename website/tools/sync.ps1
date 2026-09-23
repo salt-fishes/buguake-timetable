@@ -106,11 +106,23 @@ if ((Test-Path $bgPath) -and (Test-Path $indexPath)) {
     $idx = $idx -replace '(data-latest-text">)v[\d.]+', "`${1}v$vn"
     $idx = $idx -replace '(data-latest-download[^>]*>)下载 v[\d.]+', "`${1}下载 v$vn"
     $idx = $idx -replace '(（versionCode )\d+(）)', "`${1}$vc`${2}"
+    # 本站直链 APK 路径随版本改写（downloads/buguake-vX.Y.Z.apk，文件由 deploy 前放置服务器）
+    $idx = $idx -replace '(downloads/buguake-v)[\d.]+(\.apk)', "`${1}$vn`${2}"
     if ($idx -ne $orig) {
         [IO.File]::WriteAllText($indexPath, $idx, $utf8NoBom)
         Write-Host "[sync] index.html 版本号注入 → v$vn (versionCode $vc)"
     } else {
         Write-Host "[sync] index.html 版本号已是 v$vn"
+    }
+    # changelog.html 底部直链同步
+    $clPath = Join-Path $website 'changelog.html'
+    if (Test-Path $clPath) {
+        $cl = Get-Content $clPath -Raw -Encoding UTF8
+        $cl2 = $cl -replace '(downloads/buguake-v)[\d.]+(\.apk)', "`${1}$vn`${2}"
+        if ($cl2 -ne $cl) {
+            [IO.File]::WriteAllText($clPath, $cl2, $utf8NoBom)
+            Write-Host "[sync] changelog.html 直链注入 → buguake-v$vn.apk"
+        }
     }
 }
 exit 0

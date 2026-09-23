@@ -25,6 +25,13 @@ if ($LASTEXITCODE -ne 0) { throw "scp 页面上传失败（exit $LASTEXITCODE）
 scp -r -o BatchMode=yes -q (Join-Path $website 'assets') (Join-Path $website 'data') "${Target}:${RemotePath}/"
 if ($LASTEXITCODE -ne 0) { throw "scp 资源上传失败（exit $LASTEXITCODE）" }
 
+# 3.5) 本地产物目录（downloads/ 有 APK 时一并上传；APK 不入 git）
+$dlDir = Join-Path $website 'downloads'
+if ((Test-Path $dlDir) -and (Get-ChildItem $dlDir -Filter *.apk -ErrorAction SilentlyContinue)) {
+    scp -r -o BatchMode=yes -q $dlDir "${Target}:${RemotePath}/"
+    if ($LASTEXITCODE -ne 0) { throw "scp APK 上传失败（exit $LASTEXITCODE）" }
+}
+
 # 4) 服务器本地冒烟
 $check = ssh -o BatchMode=yes $Target "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/"
 if ($check -ne '200') { throw "部署后首页状态异常：$check" }

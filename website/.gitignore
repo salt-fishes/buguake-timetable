@@ -4,3 +4,6 @@ tools/.tmp/
 # 根 .gitignore 的全局 *.png 忽略在此作废：官网图标必须入库
 !assets/img/*.png
 
+# APK 不入库（12MB 二进制；由服务器直取 Release 或 deploy.ps1 按需上传）
+downloads/
+

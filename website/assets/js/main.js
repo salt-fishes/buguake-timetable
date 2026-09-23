@@ -141,34 +141,39 @@
     }).filter(function (el) { return el.style.opacity !== '1'; });
     if (!pending.length) return;
 
-    function playEl(el) {
-      el.setAttribute('data-revealed', '1');
-      try {
-        anime.animate(el, {
-          opacity: [0, 1], translateY: [24, 0], rotate: ['-1.2deg', '0deg'],
-          duration: 560, ease: 'out(3)'
-        });
-      } catch (e) { /* 播不了也无所谓，下面兜底会显示 */ }
-      later(function () { reveal(el); }, 760);
+    function playEl(el, delay) {
+      if (!el || el.getAttribute('data-revealed')) return;
+      el.setAttribute('data-revealed', '1');      // 立即占位，防同帧重复触发
+      later(function () {
+        try {
+          anime.animate(el, {
+            opacity: [0, 1], translateY: [24, 0], rotate: ['-1.2deg', '0deg'],
+            duration: 560, ease: 'out(3)'
+          });
+        } catch (e) { /* 播不了也无所谓，下面兜底会显示 */ }
+        later(function () { reveal(el); }, 760);
+      }, delay || 0);
     }
 
     function sweep() {
       if (!animOn) return;
       var vh = innerHeight;
       var rest = [];
+      var batch = [];
       for (var i = 0; i < pending.length; i++) {
         var el = pending[i];
         if (el.getAttribute('data-revealed')) continue;
         var r = el.getBoundingClientRect();
-        if (r.top < vh * 0.9 && r.bottom > 0) {
-          playEl(el);                       // 进入视口 90% 线 → 播入场
+        if (r.top < vh && r.bottom > 0) {
+          batch.push(el);                      // 进入视口任意部分 → 入场动画
         } else if (r.bottom <= 0) {
-          el.setAttribute('data-revealed', '1');
-          reveal(el);                       // 已被快速跳过 → 直接显示（回滚时不再补播）
+          playEl(el, 0);                       // 被快速跳过也播（离屏进行，回滚可见尾段）
         } else {
-          rest.push(el);                    // 还在视口外 → 继续等
+          rest.push(el);                       // 视口外 → 继续等
         }
       }
+      // 同一批按 DOM 顺序 70ms 级联，形成自上而下的依次入场
+      batch.forEach(function (el, idx) { playEl(el, idx * 70); });
       pending = rest;
       if (!pending.length) {
         window.removeEventListener('scroll', onScroll);
@@ -180,7 +185,10 @@
     function onScroll() {
       if (ticking) return;
       ticking = true;
-      setTimeout(function () { ticking = false; sweep(); }, 60);
+      (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
+        ticking = false;
+        sweep();
+      });
     }
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll, { passive: true });
@@ -189,13 +197,12 @@
     later(sweep, 600);  // 定时补扫（防滚动事件缺失/被节流）
     later(sweep, 1500);
     later(sweep, 3000);
-    // 终极兜底：4s 后还有没露出的（视口内本该显示的）强制显示
+    // 终极兜底：4s 后视口内/刚被跳过的还没入场 → 也走带动画的入场
     later(function () {
       pending.slice().forEach(function (el) {
         var r = el.getBoundingClientRect();
-        if (r.top < innerHeight && r.bottom > 0 && !el.getAttribute('data-revealed')) {
-          el.setAttribute('data-revealed', '1');
-          reveal(el);
+        if ((r.top < innerHeight && r.bottom > 0) || r.bottom <= 0) {
+          playEl(el, 0);
         }
       });
     }, 4000);

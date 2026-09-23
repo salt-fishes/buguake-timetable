@@ -452,18 +452,40 @@ details.faq:hover { box-shadow: 6px 6px 0 var(--ink); }
     background: var(--card); border: 2px solid var(--ink); border-radius: 99px;
     padding: 6px 14px; cursor: pointer; box-shadow: 2px 2px 0 var(--ink);
   }
-  .nav-cta { display: none; }
-  .hero-title { font-size: 32px; }
-  .h2 { font-size: 24px; }
-  .feat-grid { grid-template-columns: 1fr; }
+  .nav-cta, .nav-inner .badge-red { display: none; }
+  .hero { gap: 40px; padding-top: 36px; }
+  .hero-title { font-size: 30px; }
+  .h2 { font-size: 24px; margin-bottom: 18px; }
+  .feat-grid { grid-template-columns: 1fr; gap: 16px; }
   .btn, .btn-primary { width: 100%; }
   .hero-cta { flex-direction: column; align-items: stretch; }
   .hero-note { text-align: center; }
+
+  /* 手机端 Hero 右侧：悬浮卡脱离绝对定位、改为手机下方顺序排列，杜绝三块叠压 */
+  .hero-art { flex-direction: column; align-items: center; gap: 16px; margin-top: 0; }
+  .phone { width: min(300px, 100%); transform: rotate(0); }
+  .float-card {
+    position: static; transform: none !important;
+    width: min(300px, 100%); box-shadow: 4px 4px 0 var(--ink);
+  }
+  .float-widget { right: auto; top: auto; }
+  .float-door { left: auto; bottom: auto; }
+
+  /* 区块呼吸感 */
+  .section { padding: 38px 0 8px; }
+  .hl-grid { gap: 16px; }
+  .duo { gap: 16px; }
+  .privacy-band { margin-top: 34px; padding: 18px 18px; }
+  .dl-card, .contribute, .credits-card, .panel { padding: 18px 16px; }
+
+  /* 隐私页表格收紧，防止挤爆 */
+  .pp table { font-size: 12px; }
+  .pp th, .pp td { padding: 6px 8px; }
+  .pp h2 { margin-top: 26px; }
+
   /* 移动端：阴影减半、旋转归零 */
   .sticker, .feat, .panel { box-shadow: 3px 3px 0 var(--ink); }
-  .phone { box-shadow: 6px 6px 0 var(--ink); border-width: 3px; width: 280px; }
-  .float-widget { transform: rotate(0); width: 150px; right: 0; }
-  .float-door { transform: rotate(0); width: 168px; left: 0; }
+  .phone { box-shadow: 6px 6px 0 var(--ink); border-width: 3px; }
   .badge { transform: rotate(0); }
   .footer-grid { flex-wrap: wrap; }
   .footer-col { min-width: 120px; }

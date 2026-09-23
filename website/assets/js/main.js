@@ -130,55 +130,75 @@
     }
   }
 
-  /* ---------- 滚动揭示（一次性） ---------- */
+  /* ---------- 滚动揭示（scroll 事件轮询，不依赖 IntersectionObserver） ----------
+     实测该环境下 IO 不可靠：首次相交通知被吞、滚动中还有漏触发，导致元素「直接冒出/一直隐身」。
+     改为 scroll/resize + 定时补扫：元素顶边进入视口 90% 线即播入场动画（自上而下依次触发），
+     每个元素只触发一次；动画失败或超时兜底强制显示。 */
   function scrollReveal() {
     var hero = document.querySelector('.hero');
-    var items = Array.prototype.filter.call(document.querySelectorAll('.anim'), function (el) {
-      return !(hero && hero.contains(el)) && el.style.opacity !== '1';
-    });
-    if (!items.length) return;
+    var pending = Array.prototype.filter.call(document.querySelectorAll('.anim'), function (el) {
+      return !(hero && hero.contains(el));
+    }).filter(function (el) { return el.style.opacity !== '1'; });
+    if (!pending.length) return;
 
-    if (!('IntersectionObserver' in window)) {
-      items.forEach(reveal);
-      return;
+    function playEl(el) {
+      el.setAttribute('data-revealed', '1');
+      try {
+        anime.animate(el, {
+          opacity: [0, 1], translateY: [24, 0], rotate: ['-1.2deg', '0deg'],
+          duration: 560, ease: 'out(3)'
+        });
+      } catch (e) { /* 播不了也无所谓，下面兜底会显示 */ }
+      later(function () { reveal(el); }, 760);
     }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        var el = entry.target;
-        io.unobserve(el);
-        try {
-          anime.animate(el, {
-            opacity: [0, 1], translateY: [24, 0], rotate: ['-1.2deg', '0deg'],
-            duration: 560, ease: 'out(3)'
-          });
-        } catch (e) {
-          reveal(el);
-          return;
-        }
-        // 兜底：动画无论如何在 700ms 内显示
-        later(function () { reveal(el); }, 700);
-      });
-    }, { threshold: 0.15, rootMargin: '0px 0px -30px 0px' });
-    items.forEach(function (el) { io.observe(el); });
 
-    // 视口清扫兜底：部分 WebView 对 IO 的「首次相交通知」会延迟甚至吞掉（元素明明在首屏却永不触发），
-    // 1.2s 后强制显示此刻已在视口内的元素；首屏之下的仍由滚动 IO 负责（滚动触发已验证可靠）
-    later(function () {
-      items.forEach(function (el) {
-        if (el.style.opacity === '1') return;
+    function sweep() {
+      if (!animOn) return;
+      var vh = innerHeight;
+      var rest = [];
+      for (var i = 0; i < pending.length; i++) {
+        var el = pending[i];
+        if (el.getAttribute('data-revealed')) continue;
         var r = el.getBoundingClientRect();
-        if (r.top < innerHeight && r.bottom > 0) {
-          try {
-            anime.animate(el, {
-              opacity: [0, 1], translateY: [24, 0],
-              duration: 500, ease: 'out(3)'
-            });
-          } catch (e) { /* 动画失败也无所谓，直接显示 */ }
-          later(function () { reveal(el); }, 600);
+        if (r.top < vh * 0.9 && r.bottom > 0) {
+          playEl(el);                       // 进入视口 90% 线 → 播入场
+        } else if (r.bottom <= 0) {
+          el.setAttribute('data-revealed', '1');
+          reveal(el);                       // 已被快速跳过 → 直接显示（回滚时不再补播）
+        } else {
+          rest.push(el);                    // 还在视口外 → 继续等
+        }
+      }
+      pending = rest;
+      if (!pending.length) {
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('resize', onScroll);
+      }
+    }
+
+    var ticking = false;
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      setTimeout(function () { ticking = false; sweep(); }, 60);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+
+    sweep();            // 首屏立即扫
+    later(sweep, 600);  // 定时补扫（防滚动事件缺失/被节流）
+    later(sweep, 1500);
+    later(sweep, 3000);
+    // 终极兜底：4s 后还有没露出的（视口内本该显示的）强制显示
+    later(function () {
+      pending.slice().forEach(function (el) {
+        var r = el.getBoundingClientRect();
+        if (r.top < innerHeight && r.bottom > 0 && !el.getAttribute('data-revealed')) {
+          el.setAttribute('data-revealed', '1');
+          reveal(el);
         }
       });
-    }, 1200);
+    }, 4000);
   }
 
   /* ---------- 更新日志时间线（changelog.html） ---------- */

@@ -21,7 +21,7 @@ param(
     [string[]]$Notes = @(),
     [switch]$SkipBuild,
     [switch]$NoPush,
-    [switch]$NoRelease,
+    [switch]$NoRelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,7 +77,7 @@ $readme = [regex]::Replace(
         if ($hl) { $out += "`n`n$hl" }
         $out
     },
-    1,
+    1
 )
 [System.IO.File]::WriteAllText($readmeFile, $readme)
 Write-Host "==> README：当前版本已更新为 v$Version"

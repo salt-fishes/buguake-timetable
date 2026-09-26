@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>常见问题 · 不挂科课表</title>
-<meta name="description" content="不挂科课表常见问题：学校适配、适配失效反馈、与简课表的关系、账号密码安全、考试安排、隐私与数据。">
+<meta name="description" content="不挂科课表常见问题：学校适配、适配失效反馈、账号密码安全、考试安排、隐私与数据。">
 <meta name="theme-color" content="#333464">
 <link rel="icon" type="image/png" href="assets/img/icon-192.png?v=2">
 <link rel="stylesheet" href="assets/css/main.css?v=3">
@@ -46,43 +46,39 @@
       <div class="a">教务导入建立在开源适配生态（拾光课程表 + 社区学校索引）之上，学校教务系统改版可能导致脚本失效。修复方式：到 <a href="https://github.com/XingHeYuZhuan/shiguang_warehouse">拾光适配仓库</a> 提 Issue/PR，或在<a href="https://github.com/salt-fishes/buguake-timetable/issues">本仓库</a>附上<strong>教务网址、学校名称、失败截图或日志</strong>（内嵌浏览器页面里可长按复制报错），合并后 App 重新同步索引即可生效，无需更新客户端。</div>
     </details>
 
-    <details class="faq anim" id="q3">
-      <summary><span class="q-idx">3</span>和「简课表」是什么关系？</summary>
-      <div class="a">不挂科课表派生自同一作者的前作「简课表」。简课表主打 <strong>PDF/Excel 本地 OCR 导入</strong>（完全离线）；不挂科课表进化为<strong>教务网页一键导入</strong>，并加入宿舍蓝牙开门、考试安排、洗衣房等校园能力。两者是相互独立的应用，数据不互通。</div>
-    </details>
 
     <details class="faq anim" id="q4">
-      <summary><span class="q-idx">4</span>我的教务账号密码安全吗？</summary>
+      <summary><span class="q-idx">3</span>我的教务账号密码安全吗？</summary>
       <div class="a">教务账号与密码<strong>只在内嵌浏览器会话内使用</strong>，App 不读取、不保存、不上传，导入完成后可一键清除会话。云莓账号密码与门锁密钥只存本机，经 Android Keystore 的 AES-256/GCM 加密，登录请求由手机直连云莓服务器、App 不中转。详见 <a href="privacy.html">隐私政策</a>。</div>
     </details>
 
     <details class="faq anim" id="q5">
-      <summary><span class="q-idx">5</span>真的不收集数据吗？</summary>
+      <summary><span class="q-idx">4</span>真的不收集数据吗？</summary>
       <div class="a">不收集、不上传任何个人身份信息：课表本地存储、无广告、无统计埋点、无第三方 SDK 上报；不参与系统云备份与换机迁移；<strong>卸载 App 即删除全部本地数据。</strong>联网行为仅限下载适配脚本、加载你主动选择的教务网站、开门首次登录同步、考试读取与洗衣房只读查询，逐项列于 <a href="privacy.html">隐私政策</a>。</div>
     </details>
 
     <details class="faq anim" id="q6">
-      <summary><span class="q-idx">6</span>考试安排支持哪些学校？</summary>
+      <summary><span class="q-idx">5</span>考试安排支持哪些学校？</summary>
       <div class="a">兼容<strong>正方教务（V9）</strong>的学校（实测基准：中国计量大学）：在应用内登录教务系统后读取考试时间、考场与座位，可写入系统日历「不挂科考试」或导出 .ics，结果加密缓存在本机、可随时清空。其他教务体系的考试读取暂未覆盖，欢迎提 Issue 需求。</div>
     </details>
 
     <details class="faq anim" id="q7">
-      <summary><span class="q-idx">7</span>日常开门需要联网吗？</summary>
+      <summary><span class="q-idx">6</span>日常开门需要联网吗？</summary>
       <div class="a">不需要。宿舍开门<strong>离线优先</strong>：登录一次后门锁密钥加密保存在本机，日常开门完全通过本机蓝牙完成，不再联网、不再重复登录。可选「开门前验证指纹/面容」，支持「长按应用图标 → 快速开锁」。注意该接口基于第三方逆向实现，可能随官方更新失效。</div>
     </details>
 
     <details class="faq anim" id="q8">
-      <summary><span class="q-idx">8</span>洗衣房要登录吗？会扣费吗？</summary>
+      <summary><span class="q-idx">7</span>洗衣房要登录吗？会扣费吗？</summary>
       <div class="a">查询<strong>无需登录、不上传任何数据</strong>：直连顺水平台只读查询门店与洗衣机/烘干机状态（哪台空着、剩余时间倒计时）。下单、支付、启动设备全部跳转官方小程序完成，App 不碰支付与设备控制；定位仅在你点「附近门店」时使用一次，拒绝授权可改用门店名搜索。</div>
     </details>
 
     <details class="faq anim" id="q9">
-      <summary><span class="q-idx">9</span>升级会丢数据吗？支持什么系统？</summary>
+      <summary><span class="q-idx">8</span>升级会丢数据吗？支持什么系统？</summary>
       <div class="a">官网直链或 GitHub Releases 下载的 APK 覆盖安装不丢数据。支持 <strong>Android 8.0 及以上</strong>（arm64-v8a）；开门前的指纹/面容验证需 Android 9+（Android 8 使用锁屏密码验证）。当前最新版本见 <a href="index.html#download">下载区</a>。</div>
     </details>
 
     <details class="faq anim" id="q10">
-      <summary><span class="q-idx">10</span>失效了要负责吗？和官方有关系吗？</summary>
+      <summary><span class="q-idx">9</span>失效了要负责吗？和官方有关系吗？</summary>
       <div class="a">教务导入与宿舍开门基于第三方逆向接口，可能随学校或官方系统更新而失效；洗衣房基于顺水平台逆向接口，覆盖以官方为准。请仅将其用于个人课表管理与开门等合法用途，使用后果由使用者自行承担。<strong>本项目与任何教务系统厂商、云莓智能官方、顺水平台官方均无关联。</strong>完整表述见 <a href="index.html">首页免责声明</a>。</div>
     </details>
   </div>

@@ -102,8 +102,8 @@ if ((Test-Path $bgPath) -and (Test-Path $indexPath)) {
     $vc = if ($bg -match 'versionCode\s*=\s*(\d+)') { $Matches[1] } else { '' }
     $idx = Get-Content $indexPath -Raw -Encoding UTF8
     $orig = $idx
-    $idx = $idx -replace '(data-latest-badge">)v[\d.]+', "`${1}v$vn"
-    $idx = $idx -replace '(data-latest-text">)v[\d.]+', "`${1}v$vn"
+    $idx = $idx -replace '(data-latest-badge"?>)v[\d.]+', "`${1}v$vn"
+    $idx = $idx -replace '(data-latest-text"?>)v[\d.]+', "`${1}v$vn"
     $idx = $idx -replace '(data-latest-download[^>]*>)下载 v[\d.]+', "`${1}下载 v$vn"
     $idx = $idx -replace '(（versionCode )\d+(）)', "`${1}$vc`${2}"
     # 本站直链 APK 路径随版本改写（downloads/buguake-vX.Y.Z.apk，文件由 deploy 前放置服务器）

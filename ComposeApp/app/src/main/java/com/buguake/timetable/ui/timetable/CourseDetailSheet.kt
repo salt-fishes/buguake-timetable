@@ -96,7 +96,7 @@ fun CourseDetailSheet(
             DetailRow("教师", entry.teacher.ifBlank { "—" })
             if (entry.remark.isNotBlank()) DetailRow("备注", entry.remark)
 
-            // 操作行（MD3：主操作 FilledTonal，次操作 Text）
+            // 操作行（主操作为填充按钮，次操作为纯文字按钮）
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(top = 12.dp),

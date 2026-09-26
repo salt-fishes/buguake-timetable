@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.compare
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -114,7 +116,7 @@ fun CompareScreen(
                 title = { Text("课表对比（实验性）") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {

@@ -1,18 +1,14 @@
 package com.buguake.timetable.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalContext
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,
@@ -83,24 +79,18 @@ private val DarkColors = darkColorScheme(
 )
 
 /**
- * MD3 应用主题（seed #333464 TonalSpot）：
- * - 动态取色默认关闭（品牌一致），可在设置中开启（仅 API 31+）
- * - 动效统一走 AppMotion（Expressive 风格；1.5 稳定后可切官方 MotionScheme）
+ * 贴纸设计系统主题（颜色 token 见 Color.kt，与官网同源）：
+ * - 亮/暗两套纸面配色，全部为固定品牌色，不跟随壁纸
+ * - colorScheme 仅作兼容过渡层（界面代码沿用旧取值路径），语义已由贴纸 token 决定
+ * - 动效统一走 AppMotion（全局同一套弹簧规格）
  */
 @Composable
 fun ComposeAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
+    val colorScheme = if (darkTheme) DarkColors else LightColors
 
     // 玻璃模式下 Scaffold/Surface 用透明 containerColor，contentColorFor(Transparent)
     // 返回未指定，LocalContentColor 会保留默认黑色——暗色模式正文全变黑。

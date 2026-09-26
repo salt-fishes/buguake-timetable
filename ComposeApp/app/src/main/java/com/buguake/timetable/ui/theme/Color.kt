@@ -7,76 +7,104 @@ import androidx.compose.ui.graphics.luminance
 import kotlin.math.max
 import kotlin.math.min
 
-// 基于 seed #333464（TonalSpot，material-color-utilities 计算）
-val SeedPrimary = Color(0xFF333464)
+/**
+ * 贴纸设计系统 · 全局色彩 token（与官网 website/assets/css/main.css 1:1 对应）。
+ * 颜色按「纸面 / 墨线 / 荧光黄 / 品牌色」组织；下方再映射进 MaterialTheme 的
+ * colorScheme 槽位作为兼容过渡层，界面代码继续从 colorScheme 取值即可拿到贴纸配色。
+ */
 
-// ---- 亮色方案 ----
-val LightPrimary = Color(0xFF585992)
+// ---- 基础 token ----
+val Paper = Color(0xFFFFF8EC)          // 亮色纸面（页面底）
+val Paper2 = Color(0xFFFDF1DE)         // 次级纸面（输入框底、斑马纹）
+val Ink = Color(0xFF2D2A45)            // 墨色（正文 + 描边）
+val InkDim = Color(0xFF6B6685)         // 次级文字
+val InkFaint = Color(0xFF8A849F)       // 弱文字
+val Highlight = Color(0xFFFFD666)      // 荧光黄（高亮/选中/徽章）
+val Brand = Color(0xFF333464)          // 品牌色（主按钮/选中胶囊底）
+val StickerRed = Color(0xFFC0392B)     // 警示红（错误/今日表头/时间红线）
+val LineSoft = Color(0xFFC9BFAE)       // 软线（虚线 chip 描边）
+val StickerCard = Color(0xFFFFFFFF)    // 贴纸面
+
+// ---- 暗色纸面（夜间手帐：正文柔光、描边中调、投影比纸面更深）----
+val PaperDark = Color(0xFF1C1926)      // 暗色纸面
+val Paper2Dark = Color(0xFF262230)
+val CardDark = Color(0xFF2C2839)       // 暗色贴纸面
+val InkDark = Color(0xFFE3DEE9)        // 暗色正文（柔光薰衣草白，不再刺眼）
+val InkDimDark = Color(0xFFA9A3BE)
+val InkFaintDark = Color(0xFF8F88A6)
+val LineSoftDark = Color(0xFF3A3547)
+val StickerRedDark = Color(0xFFE57368)
+val BorderDark = Color(0xFF7E7796)     // 暗色描边：中调灰紫，勾勒可辨但不发光
+val ShadowDark = Color(0xFF120F1A)     // 暗色硬投影：比纸面更深，压出层次而非加亮
+
+// ---- 兼容过渡层：贴纸 token → colorScheme 槽位映射 ----
+val LightPrimary = Brand
 val LightOnPrimary = Color(0xFFFFFFFF)
-val LightPrimaryContainer = Color(0xFFE1DFFF)
-val LightOnPrimaryContainer = Color(0xFF13144A)
-val LightSecondary = Color(0xFF5D5C72)
+val LightPrimaryContainer = Highlight
+val LightOnPrimaryContainer = Ink
+val LightSecondary = InkDim
 val LightOnSecondary = Color(0xFFFFFFFF)
-val LightSecondaryContainer = Color(0xFFE2E0F9)
-val LightOnSecondaryContainer = Color(0xFF1A1A2C)
-val LightTertiary = Color(0xFF795369)
+val LightSecondaryContainer = Brand          // 底栏选中胶囊：品牌底 + 荧光字（同官网手机 mock）
+val LightOnSecondaryContainer = Highlight
+val LightTertiary = Color(0xFF7A5B3A)
 val LightOnTertiary = Color(0xFFFFFFFF)
-val LightTertiaryContainer = Color(0xFFFFD8EC)
-val LightOnTertiaryContainer = Color(0xFF2E1125)
-val LightError = Color(0xFFB3261E)
+val LightTertiaryContainer = Paper2
+val LightOnTertiaryContainer = Ink
+val LightError = StickerRed
 val LightOnError = Color(0xFFFFFFFF)
-val LightErrorContainer = Color(0xFFF9DEDC)
-val LightOnErrorContainer = Color(0xFF410E0B)
-val LightSurface = Color(0xFFFCF8FD)
-val LightOnSurface = Color(0xFF1C1B1F)
-val LightOnSurfaceVariant = Color(0xFF47464F)
-val LightSurfaceContainerLowest = Color(0xFFFFFFFF)
-val LightSurfaceContainerLow = Color(0xFFF6F2F7)
-val LightSurfaceContainer = Color(0xFFF0EDF1)
-val LightSurfaceContainerHigh = Color(0xFFEBE7EC)
-val LightSurfaceContainerHighest = Color(0xFFE5E1E6)
-val LightOutline = Color(0xFF777680)
-val LightOutlineVariant = Color(0xFFC8C5D0)
-val LightInverseSurface = Color(0xFF313034)
-val LightInverseOnSurface = Color(0xFFF3EFF4)
-val LightInversePrimary = Color(0xFFC1C1FF)
-val LightSurfaceDim = Color(0xFFDCD9DE)
-val LightSurfaceBright = Color(0xFFFCF8FD)
+val LightErrorContainer = Color(0xFFFFE1E1)
+val LightOnErrorContainer = Color(0xFF5A1210)
+val LightSurface = Paper
+val LightOnSurface = Ink
+val LightOnSurfaceVariant = InkDim
+val LightSurfaceContainerLowest = StickerCard
+val LightSurfaceContainerLow = Paper2
+val LightSurfaceContainer = Color(0xFFFAF0DC)
+val LightSurfaceContainerHigh = Color(0xFFF4E6CC)
+val LightSurfaceContainerHighest = Color(0xFFECD8B8)
+val LightOutline = Ink                       // 描边 token：亮色下即墨线（贴纸轮廓）
+val LightOutlineVariant = LineSoft
+val LightInverseSurface = Ink
+val LightInverseOnSurface = Paper
+val LightInversePrimary = Highlight
+val LightSurfaceDim = Color(0xFFEADFC8)
+val LightSurfaceBright = Color(0xFFFFFBF2)
 
-// ---- 暗色方案 ----
-val DarkPrimary = Color(0xFFC1C1FF)
-val DarkOnPrimary = Color(0xFF292A60)
-val DarkPrimaryContainer = Color(0xFF404178)
-val DarkOnPrimaryContainer = Color(0xFFE1DFFF)
-val DarkSecondary = Color(0xFFC6C4DD)
-val DarkOnSecondary = Color(0xFF2F2F42)
-val DarkSecondaryContainer = Color(0xFF454559)
-val DarkOnSecondaryContainer = Color(0xFFE2E0F9)
-val DarkTertiary = Color(0xFFE9B9D3)
-val DarkOnTertiary = Color(0xFF46263A)
-val DarkTertiaryContainer = Color(0xFF5F3C51)
-val DarkOnTertiaryContainer = Color(0xFFFFD8EC)
-val DarkError = Color(0xFFF2B8B5)
-val DarkOnError = Color(0xFF601410)
-val DarkErrorContainer = Color(0xFF8C1D18)
-val DarkOnErrorContainer = Color(0xFFF9DEDC)
-val DarkSurface = Color(0xFF131316)
-val DarkOnSurface = Color(0xFFE5E1E6)
-val DarkOnSurfaceVariant = Color(0xFFC8C5D0)
-val DarkSurfaceContainerLowest = Color(0xFF0E0E11)
-val DarkSurfaceContainerLow = Color(0xFF1C1B1F)
-val DarkSurfaceContainer = Color(0xFF201F23)
-val DarkSurfaceContainerHigh = Color(0xFF2A292D)
-val DarkSurfaceContainerHighest = Color(0xFF353438)
-val DarkOutline = Color(0xFF918F9A)
-val DarkOutlineVariant = Color(0xFF47464F)
-val DarkInverseSurface = Color(0xFFE5E1E6)
-val DarkInverseOnSurface = Color(0xFF313034)
-val DarkInversePrimary = Color(0xFF585992)
-val DarkSurfaceDim = Color(0xFF131316)
-val DarkSurfaceBright = Color(0xFF39393C)
+// 暗色下 primary 翻转为浅色调：它大量用作文字/图标的强调色（标题、入口图标、链接），
+// 深蓝 #333464 在暗纸面上不可读；作按钮底色时由 onPrimary（深navy）保证对比。
+val DarkPrimary = Color(0xFFC5C4F2)
+val DarkOnPrimary = Color(0xFF1F1E4F)
+val DarkPrimaryContainer = Color(0xFF45446E)
+val DarkOnPrimaryContainer = Highlight
+val DarkSecondary = InkDimDark
+val DarkOnSecondary = InkDark
+val DarkSecondaryContainer = Brand
+val DarkOnSecondaryContainer = Highlight
+val DarkTertiary = Color(0xFFC9B48F)
+val DarkOnTertiary = InkDark
+val DarkTertiaryContainer = Color(0xFF3A3450)
+val DarkOnTertiaryContainer = Color(0xFFE8DCC2)
+val DarkError = StickerRedDark
+val DarkOnError = Color(0xFF3A0E0A)
+val DarkErrorContainer = Color(0xFF5A1B15)
+val DarkOnErrorContainer = Color(0xFFFFDAD6)
+val DarkSurface = PaperDark
+val DarkOnSurface = InkDark
+val DarkOnSurfaceVariant = InkDimDark
+val DarkSurfaceContainerLowest = CardDark
+val DarkSurfaceContainerLow = Paper2Dark
+val DarkSurfaceContainer = Color(0xFF292535)
+val DarkSurfaceContainerHigh = Color(0xFF322E43)
+val DarkSurfaceContainerHighest = Color(0xFF3A3450)
+val DarkOutline = BorderDark
+val DarkOutlineVariant = LineSoftDark
+val DarkInverseSurface = InkDark
+val DarkInverseOnSurface = PaperDark
+val DarkInversePrimary = Highlight
+val DarkSurfaceDim = Color(0xFF17141F)
+val DarkSurfaceBright = Color(0xFF2A2639)
 
-// ---- 课程块派生色（12 组，seed 色相每 30° 展开，MD3 容器色调对）----
+// ---- 课程块粉彩色（官网五组 --c-*-bg/fg × 深浅 = 10 组，亮暗各配）----
 data class BlockPalette(
     val containerLight: Color,
     val onContainerLight: Color,
@@ -85,18 +113,21 @@ data class BlockPalette(
 )
 
 val CourseBlockPalettes: List<BlockPalette> = listOf(
-    BlockPalette(Color(0xFFE1DFFF), Color(0xFF2A2B5D), Color(0xFF414275), Color(0xFFE1DFFF)), // hue 285
-    BlockPalette(Color(0xFFF6D9FF), Color(0xFF471C5D), Color(0xFF5F3476), Color(0xFFF6D9FF)), // hue 318
-    BlockPalette(Color(0xFFFFD8E8), Color(0xFF5E0A40), Color(0xFF7B2557), Color(0xFFFFD8E8)), // hue 351
-    BlockPalette(Color(0xFFFFDAD6), Color(0xFF551F1B), Color(0xFF713530), Color(0xFFFFDAD6)), // hue 24
-    BlockPalette(Color(0xFFFFDCC4), Color(0xFF4E2600), Color(0xFF6F3900), Color(0xFFFFDCC4)), // hue 57
-    BlockPalette(Color(0xFFFFDF91), Color(0xFF3E2E00), Color(0xFF594400), Color(0xFFFFDF91)), // hue 90
-    BlockPalette(Color(0xFFD9EA9E), Color(0xFF293500), Color(0xFF3F4C11), Color(0xFFD9EA9E)), // hue 123
-    BlockPalette(Color(0xFFBDF2C9), Color(0xFF00391D), Color(0xFF005229), Color(0xFFB4F5C4)), // hue 138
-    BlockPalette(Color(0xFFA4F4BA), Color(0xFF00391C), Color(0xFF00522B), Color(0xFFA4F4BA)), // hue 156
-    BlockPalette(Color(0xFF5DF9EC), Color(0xFF003733), Color(0xFF00504B), Color(0xFF5DF9EC)), // hue 189
-    BlockPalette(Color(0xFFB5EBFF), Color(0xFF003543), Color(0xFF004E60), Color(0xFFB5EBFF)), // hue 222
-    BlockPalette(Color(0xFFE2E1FF), Color(0xFF1A1B60), Color(0xFF43447E), Color(0xFFE3E2FF)), // hue 255
+    // 蓝
+    BlockPalette(Color(0xFFDEE4FF), Color(0xFF3D51C8), Color(0xFF2E3050), Color(0xFFAAB6F5)),
+    BlockPalette(Color(0xFFCBD5FF), Color(0xFF3347B0), Color(0xFF383B66), Color(0xFFBDC7F8)),
+    // 橙
+    BlockPalette(Color(0xFFFFE1CC), Color(0xFFBC5C1A), Color(0xFF4A3325), Color(0xFFF0A878)),
+    BlockPalette(Color(0xFFFFD1B0), Color(0xFFA34E10), Color(0xFF573D2C), Color(0xFFF4B88E)),
+    // 绿
+    BlockPalette(Color(0xFFD0F1E1), Color(0xFF1F7A55), Color(0xFF1F4034), Color(0xFF7CC7A6)),
+    BlockPalette(Color(0xFFBCE7D7), Color(0xFF196747), Color(0xFF275040), Color(0xFF8ED2B2)),
+    // 紫
+    BlockPalette(Color(0xFFEDDBFF), Color(0xFF7737AE), Color(0xFF3E2F50), Color(0xFFC39BE0)),
+    BlockPalette(Color(0xFFE1CBFF), Color(0xFF652D96), Color(0xFF4A3860), Color(0xFFCDA9E8)),
+    // 黄
+    BlockPalette(Color(0xFFFFF1B8), Color(0xFF8A700D), Color(0xFF453C1E), Color(0xFFE3C46A)),
+    BlockPalette(Color(0xFFFFE999), Color(0xFF756009), Color(0xFF524723), Color(0xFFEACB7C)),
 )
 
 /** 课程 colorIndex -> (容器色, 内容色)，自动适配亮暗主题。 */
@@ -123,21 +154,11 @@ private fun rgbToHsv(c: Color): FloatArray {
 }
 
 /**
- * 动态取色下的课程块颜色：以当前 colorScheme 的 primary 色相为基准，
- * 按 30° 间隔旋转生成 12 组容器/内容色调对（与默认十二组同款结构），
- * 使动态取色下仍保持十组颜色区分度，且随壁纸主题联动。
+ * 课程块颜色（兼容入口，历史上跟随壁纸取色，贴纸设计系统改为固定品牌色板）：
+ * 直接返回当前主题下的标准粉彩色，行为与 courseBlockColors 一致。
  */
 @Composable
 fun courseBlockColorsDynamic(index: Int): Pair<Color, Color> {
-    val cs = MaterialTheme.colorScheme
-    val dark = cs.surface.luminance() < 0.5f
-    val hsv = rgbToHsv(cs.primary)
-    val hue = (hsv[0] + (index % CourseBlockPalettes.size) * 30f) % 360f
-    return if (dark) {
-        Color.hsv(hue, saturation = 0.40f, value = 0.30f) to
-            Color.hsv(hue, saturation = 0.35f, value = 0.90f)
-    } else {
-        Color.hsv(hue, saturation = 0.45f, value = 0.88f) to
-            Color.hsv(hue, saturation = 0.55f, value = 0.20f)
-    }
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return courseBlockColors(index, dark)
 }

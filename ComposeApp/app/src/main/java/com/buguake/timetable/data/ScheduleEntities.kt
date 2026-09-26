@@ -88,7 +88,12 @@ data class EntryWithCourse(
     val customEndTime: String = "",
     val remark: String = "",
 ) {
-    val weeks: Set<Int> get() = weeksCsv.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+    // 热路径缓存（性能方案 P2-1）：weeks 被网格渲染/翻周/每分钟时间线高频读取，
+    // 同一条目只解析一次（EntryWithCourse 由 Room 每次查询重建，缓存随实例生命周期）
+    private val weeksParsed: Set<Int> by lazy {
+        weeksCsv.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+    }
+    val weeks: Set<Int> get() = weeksParsed
 
     fun isInWeek(week: Int): Boolean = week in weeks
 

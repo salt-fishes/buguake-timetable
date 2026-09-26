@@ -1,5 +1,7 @@
 package com.buguake.timetable.campus.ui
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -100,7 +102,7 @@ fun LaundryHome(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(SketchArrowBack, contentDescription = "返回")
                 }
                 // 门店栏可点：换校区/换门店
                 TextButton(onClick = onPickStore) {
@@ -115,7 +117,7 @@ fun LaundryHome(
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else if (default != null) {
                     IconButton(onClick = { loadInfo() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                        Icon(SketchRefresh, contentDescription = "刷新")
                     }
                 }
             }
@@ -332,7 +334,7 @@ fun LaundryDevices(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(SketchArrowBack, contentDescription = "返回")
             }
             Column {
                 Text(house.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

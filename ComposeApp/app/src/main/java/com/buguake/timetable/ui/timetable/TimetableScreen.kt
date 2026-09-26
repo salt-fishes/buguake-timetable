@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.timetable
 
+import com.buguake.timetable.ui.theme.*
+
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -75,8 +77,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -149,6 +154,7 @@ fun TimetableScreen(
     onSwitchTimetable: (Long) -> Unit = {},
     onNewTimetable: () -> Unit = {},   // 自动新建未命名课表并进入导入流程
     onOpenManage: () -> Unit = {},
+    onOpenMoveCourse: () -> Unit = {},  // 打开按天调课页
     modifier: Modifier = Modifier,
 ) {
     val today = remember { LocalDate.now() }
@@ -213,7 +219,7 @@ fun TimetableScreen(
     var showWeekPicker by rememberSaveable { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     var examDetail by remember { mutableStateOf<com.buguake.timetable.campus.exam.CampusExam?>(null) }
-    // 动态取色开关：课表块颜色随壁纸主题联动
+    // 课程块配色：固定粉彩色板（原动态取色已随贴纸设计系统退役，开关仅保留兼容链路）
     val dynamicColor = settings.dynamicColor
 
     val visibleDays = remember(settings.showWeekend) {
@@ -411,7 +417,7 @@ fun TimetableScreen(
                             )
                         } else {
                             Icon(
-                                Icons.Filled.Share,
+                                SketchShare,
                                 contentDescription = "分享本周课表",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -420,7 +426,7 @@ fun TimetableScreen(
                 }
                 IconButton(onClick = onAddClick) {
                     Icon(
-                        Icons.Filled.Add,
+                        SketchAdd,
                         contentDescription = "新增课程",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -430,19 +436,15 @@ fun TimetableScreen(
                     showWeekPicker = true
                 }) {
                     Icon(
-                        Icons.Filled.DateRange,
+                        SketchCalendar,
                         contentDescription = "周数与课表",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         }
-        // 标题舱不再包容器背景：标题/图标直接放在磨砂背景之上（亮暗模式由主题色保证可读）
+        // 标题舱不再包容器背景：标题/图标直接放在纸面背景之上（亮暗模式由主题色保证可读）
         headerContent()
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant
-                .copy(alpha = if (glass) 0.35f else 1f)
-        )
 
         // ---- 星期表头（轴角落显示展示周的月份，随滑动切换） ----
         Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -631,6 +633,10 @@ fun TimetableScreen(
                     showWeekPicker = false
                     onOpenManage()
                 }) { Text("管理") }
+                TextButton(onClick = {
+                    showWeekPicker = false
+                    onOpenMoveCourse()
+                }) { Text("调课") }
             }
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
@@ -728,7 +734,7 @@ private fun TimetableCard(
             val checkScale = com.buguake.timetable.ui.theme.rememberPopScale(active)
             if (active && checkScale > 0.01f) {
                 Icon(
-                    Icons.Filled.Check,
+                    SketchCheck,
                     contentDescription = "使用中",
                     tint = Color.White,
                     modifier = Modifier
@@ -772,12 +778,12 @@ internal fun DayHeader(
         label = "todayCircle",
     )
     val weekdayColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isToday) cs.primary else cs.onSurfaceVariant,
+        targetValue = if (isToday) cs.error else cs.onSurfaceVariant,
         animationSpec = AppMotion.effects(),
         label = "todayWeekday",
     )
     val dayColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isToday) cs.onPrimary else cs.onSurfaceVariant,
+        targetValue = if (isToday) cs.onPrimaryContainer else cs.onSurfaceVariant,
         animationSpec = AppMotion.effects(),
         label = "todayDay",
     )
@@ -799,7 +805,9 @@ internal fun DayHeader(
                             scaleX = circleScale
                             scaleY = circleScale
                         }
-                        .background(cs.primary, CircleShape)
+                        // 今日徽标：荧光黄底 + 贴纸描边的圆徽章
+                        .background(cs.primaryContainer, CircleShape)
+                        .border(1.5.dp, com.buguake.timetable.ui.theme.stickerBorderColor(), CircleShape)
                 )
             }
             Text(
@@ -1106,22 +1114,7 @@ private fun DayColumn(
     BoxWithConstraints(modifier) {
         val colWidth = maxWidth
 
-        // 节次背景分隔线
-        Column(Modifier.fillMaxSize()) {
-            repeat(maxSection) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(ROW_HEIGHT)
-                        .padding(top = 0.5.dp)
-                ) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
-                        thickness = 0.5.dp,
-                    )
-                }
-            }
-        }
+        // 去网格线：不画节次背景分隔线，课程块以贴纸形式直接落在纸面上
 
         // 课程块（先过滤掉不显示的，再冲突分槽，避免隐藏条目占槽位）
         val visibleEntries = remember(dayEntries, week, showNonCurrentWeek) {
@@ -1219,7 +1212,7 @@ private fun CourseBlock(
     onDragEnd: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    // 动态取色开启：从主题派生三组容器色；关闭：十组品牌色（自动适配亮暗主题）
+    // 课程块颜色：固定粉彩色板（自动适配亮暗主题）
     val (container, onContainer) = if (dynamicColor) {
         courseBlockColorsDynamic(entry.colorIndex)
     } else {
@@ -1227,7 +1220,7 @@ private fun CourseBlock(
         courseBlockColors(entry.colorIndex, isDark)
     }
     // 课程名按块宽自适应：保证每行约显示三个字（参考主流课表排版）
-    // 按压缩放动效（MD3：0.97，弹簧回弹）
+    // 按压缩放动效（0.97，弹簧回弹）
     var pressed by remember(entry.entryId) { mutableStateOf(false) }
     val pressScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (pressed || isDragging) 0.97f else 1f,
@@ -1352,24 +1345,26 @@ private fun CourseBlock(
         }
         return
     }
+    val blockShape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+    val borderColor = com.buguake.timetable.ui.theme.stickerBorderColor()
+    val shadowColor = com.buguake.timetable.ui.theme.stickerShadowColor()
     BoxWithConstraints(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .alpha(blockAlpha)
             .then(scaleModifier)
             .then(dragModifier)
-            .border(
-                width = 1.dp,
-                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(
-                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.72f),
-                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.14f),
-                        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.40f),
-                    )
-                ),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
-            )
-            .background(container, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+            // 贴纸块：2dp 硬投影 + 1.5dp 描边（去网格线后由块体自身勾勒轮廓）
+            .drawBehind {
+                drawRoundRect(
+                    color = shadowColor,
+                    topLeft = Offset(2.dp.toPx(), 2.dp.toPx()),
+                    size = Size(size.width, size.height),
+                    cornerRadius = CornerRadius(8.dp.toPx()),
+                )
+            }
+            .background(container, blockShape)
+            .border(1.5.dp, borderColor, blockShape)
             .clipToBounds()
             .then(gestureModifier)
             .padding(horizontal = 3.dp, vertical = 4.dp)

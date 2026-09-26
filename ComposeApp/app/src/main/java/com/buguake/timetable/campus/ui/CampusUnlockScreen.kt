@@ -1,5 +1,7 @@
 package com.buguake.timetable.campus.ui
 
+import com.buguake.timetable.ui.theme.*
+
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
@@ -426,7 +428,7 @@ fun CampusUnlockScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                     Column(Modifier.weight(1f).padding(start = 4.dp)) {
                         Text(
@@ -442,7 +444,7 @@ fun CampusUnlockScreen(
                     }
                     if (locks.isNotEmpty()) {
                         IconButton(onClick = { step = UnlockStep.Data }) {
-                            Icon(Icons.Filled.Info, contentDescription = "数据详情")
+                            Icon(SketchInfo, contentDescription = "数据详情")
                         }
                     }
                 }
@@ -520,7 +522,7 @@ fun CampusUnlockScreen(
                             verticalAlignment = Alignment.Top,
                         ) {
                             Icon(
-                                Icons.Filled.Info,
+                                SketchInfo,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp),
@@ -869,7 +871,7 @@ private fun UnlockDataSection(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            Icon(SketchArrowBack, contentDescription = "返回")
         }
         Column(Modifier.weight(1f).padding(start = 4.dp)) {
             Text(

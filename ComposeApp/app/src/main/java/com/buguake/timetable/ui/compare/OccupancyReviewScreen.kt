@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.compare
 
+import com.buguake.timetable.ui.theme.*
+
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -107,7 +109,7 @@ fun OccupancyReviewScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             IconButton(onClick = { Haptics.tick(context); onCancel() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(SketchArrowBack, contentDescription = "返回")
             }
             Text(
                 "识别结果校正",

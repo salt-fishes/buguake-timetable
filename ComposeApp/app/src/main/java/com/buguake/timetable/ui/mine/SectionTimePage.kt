@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.mine
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -98,7 +100,7 @@ fun SectionTimePage(
                     .padding(top = 8.dp),
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(SketchArrowBack, contentDescription = "返回")
                 }
                 Text("作息时间设置", style = MaterialTheme.typography.titleMedium)
             }
@@ -158,7 +160,7 @@ fun SectionTimePage(
                                         label = { Text(p.name) },
                                         trailingIcon = {
                                             Icon(
-                                                Icons.Filled.Close,
+                                                SketchClose,
                                                 contentDescription = "删除预设 ${p.name}",
                                                 modifier = Modifier
                                                     .size(16.dp)
@@ -198,7 +200,7 @@ fun SectionTimePage(
                                                 IconButton(
                             onClick = { onSetSectionsPerDay(settings.sectionsPerDay + 1) },
                             enabled = settings.sectionsPerDay < 16,
-                        ) { Icon(Icons.Filled.Add, contentDescription = "增加一节") }
+                        ) { Icon(SketchAdd, contentDescription = "增加一节") }
                     }
                 }
 
@@ -268,7 +270,7 @@ fun SectionTimePage(
                                 }
                                 Spacer(Modifier.size(6.dp))
                                 Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    SketchChevronRight,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -441,7 +443,7 @@ private fun StepperRow(
             modifier = Modifier.padding(horizontal = 8.dp),
         )
         IconButton(onClick = { onChange((value + step).coerceAtMost(max)) }, enabled = value < max) {
-            Icon(Icons.Filled.Add, contentDescription = "增加")
+            Icon(SketchAdd, contentDescription = "增加")
         }
     }
 }

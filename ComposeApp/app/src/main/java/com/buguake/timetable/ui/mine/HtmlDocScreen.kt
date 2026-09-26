@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.mine
 
+import com.buguake.timetable.ui.theme.*
+
 import android.annotation.SuppressLint
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -80,7 +82,7 @@ fun HtmlDocScreen(
                 title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = surface),

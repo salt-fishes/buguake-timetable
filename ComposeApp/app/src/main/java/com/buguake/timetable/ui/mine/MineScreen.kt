@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.mine
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.togetherWith
@@ -18,11 +20,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -161,7 +175,7 @@ fun MineScreen(
                 modifier = Modifier.padding(top = 4.dp),
             ) {
                 IconButton(onClick = { Haptics.tick(context); detailPageState = "" }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(SketchArrowBack, contentDescription = "返回")
                 }
                 Text(
                     pageTitle,
@@ -265,6 +279,7 @@ fun MineScreen(
                     "统一设置 / 作息预设 / 逐节微调",
                     trailing = "${fmt(settings.sectionTimes.first().start.hour, settings.sectionTimes.first().start.minute)}" +
                         " - ${fmt(settings.sectionTimes.last().end.hour, settings.sectionTimes.last().end.minute)}",
+                    icon = SketchCalendar,
                 ) { Haptics.tick(context); onOpenSectionTimes() }
                 CardDivider()
                 ActionRow(
@@ -276,9 +291,14 @@ fun MineScreen(
                     } else {
                         "已关闭 · 点击进入设置"
                     },
+                    icon = SketchBell,
                 ) { Haptics.tick(context); onOpenReminders() }
                 CardDivider()
-                ActionRow("桌面小组件", "2×2 / 3×2 / 4×2（今明双栏）三种尺寸，分别绑定课表") { Haptics.tick(context); onOpenWidgetBind() }
+                ActionRow(
+                    "桌面小组件",
+                    "2×2 / 3×2 / 4×2（今明双栏）三种尺寸，分别绑定课表",
+                    icon = SketchStar,
+                ) { Haptics.tick(context); onOpenWidgetBind() }
             }
         }
 
@@ -286,24 +306,49 @@ fun MineScreen(
         SectionHeader("更多设置")
         GlassCard(glass, Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                ActionRow("课表管理", "多课表切换 / 重命名 / 复制") { Haptics.tick(context); onOpenTimetableManage() }
+                ActionRow(
+                    "课表管理",
+                    "多课表切换 / 重命名 / 复制",
+                    icon = SketchWrench,
+                ) { Haptics.tick(context); onOpenTimetableManage() }
                 CardDivider()
-                ActionRow("课表对比（实验性）", "勾选多张课表，找共同空闲时间") { Haptics.tick(context); onOpenCompare() }
+                ActionRow(
+                    "课表对比（实验性）",
+                    "勾选多张课表，找共同空闲时间",
+                    icon = SketchSearch,
+                ) { Haptics.tick(context); onOpenCompare() }
                 CardDivider()
-                ActionRow("导入源仓库", "适配器脚本与学校索引来源 · 支持自定义") { Haptics.tick(context); detailPageState = "repo" }
+                ActionRow(
+                    "导入源仓库",
+                    "适配器脚本与学校索引来源 · 支持自定义",
+                    icon = SketchRefresh,
+                ) { Haptics.tick(context); detailPageState = "repo" }
                 CardDivider()
-                ActionRow("显示与样式", "显示开关 · 长按范围 · 磨砂玻璃背景 · 深色模式") { Haptics.tick(context); detailPageState = "display" }
+                ActionRow(
+                    "显示与样式",
+                    "显示开关 · 长按范围 · 纸面背景 · 深色模式",
+                    icon = SketchFace,
+                ) { Haptics.tick(context); detailPageState = "display" }
                 CardDivider()
-                ActionRow("日历与导出", "同步系统日历 · 清空 · 导出 .ics") { Haptics.tick(context); detailPageState = "calendar" }
+                ActionRow(
+                    "日历与导出",
+                    "同步系统日历 · 清空 · 导出 .ics",
+                    icon = SketchSend,
+                ) { Haptics.tick(context); detailPageState = "calendar" }
                 CardDivider()
-                ActionRow("数据管理", "课程统计 · 清除当前课表") { Haptics.tick(context); detailPageState = "data" }
+                ActionRow(
+                    "数据管理",
+                    "课程统计 · 清除当前课表",
+                    icon = SketchList,
+                ) { Haptics.tick(context); detailPageState = "data" }
                 CardDivider()
                 ActionRow(
                     "关于不挂科课表",
                     trailing = "版本 ${com.buguake.timetable.BuildConfig.VERSION_NAME}",
+                    icon = SketchInfo,
                 ) { onOpenAbout() }
                 CardDivider()
-                ActionRow("隐私政策", trailing = "无广告") { onOpenPrivacy() }
+                ActionRow("隐私政策", trailing = "无广告", icon = SketchLock) { onOpenPrivacy() }
             }
         }
         }  // if (detailPage.isEmpty()) 一级页：学期 / 常用 / 更多设置
@@ -353,67 +398,40 @@ fun MineScreen(
                     },
                 ) { showMoveScopeDialog = true }
                 CardDivider()
-                SwitchRow("磨砂玻璃风格", settings.customBgEnabled, onSetCustomBgEnabled, Modifier.padding(horizontal = 16.dp))
-                AnimatedVisibility(
-                    visible = settings.customBgEnabled,
-                    enter = expandVertically(AppMotion.spatial()) + fadeIn(AppMotion.effects()),
-                    exit = shrinkVertically(AppMotion.spatialFast()) + fadeOut(AppMotion.effectsFast()),
-                ) {
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onPickBackground() }
-                                .padding(vertical = 8.dp),
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("选择背景图片（可选）", style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    if (settings.customBgPath.isBlank()) "未设置 · 使用内置渐变背景"
-                                    else "已设置 · 自定义图片铺满首页/今日页/底栏",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPickBackground() }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("选择纸面背景图片（可选）", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "选择",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
+                                if (settings.customBgPath.isBlank()) "未设置 · 使用纸色打底"
+                                else "已设置 · 自定义图片铺在纸面层，贴纸卡片压在图上",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (settings.customBgPath.isNotBlank()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "背景模糊",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.width(72.dp),
-                                )
-                                Slider(
-                                    value = settings.customBgBlurDp.toFloat(),
-                                    onValueChange = { onSetCustomBgBlur(((it / 4f).roundToInt() * 4)) },
-                                    valueRange = 0f..28f,
-                                    steps = 6,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    "${settings.customBgBlurDp}dp",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.width(44.dp),
-                                )
-                            }
-                            TextButton(onClick = onClearBackground) {
-                                Text("清除背景图片", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
                         Text(
-                            "覆盖首页、今日页与底栏；背景可换为自定义图片",
+                            "选择",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (settings.customBgPath.isNotBlank()) {
+                        TextButton(onClick = onClearBackground) {
+                            Text("清除背景图片", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                        Text(
+                            "覆盖首页、今日页与底栏",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-            }
         }
         }  // GlassCard
         }  // if (detailPage == "display")
@@ -455,13 +473,6 @@ fun MineScreen(
                         label = { Text("暗色") },
                     )
                 }
-                CardDivider(Modifier.padding(vertical = 4.dp))
-                SwitchRow(
-                    "动态取色（Android 12+）",
-                    settings.dynamicColor,
-                    onSetDynamicColor,
-                    Modifier.padding(horizontal = 16.dp),
-                )
             }
         }
         }  // if (detailPage == "display")：外观在二级页
@@ -677,7 +688,7 @@ private fun CardDivider(modifier: Modifier = Modifier) {
     )
 }
 
-/** 设置卡片内的可点击行：主标题 + 可选说明 + 可选右侧值。 */
+/** 设置卡片内的可点击行：可选图标 + 主标题 + 可选说明 + 可选右侧值。 */
 @Composable
 private fun ActionRow(
     title: String,
@@ -685,6 +696,7 @@ private fun ActionRow(
     trailing: String? = null,
     danger: Boolean = false,
     enabled: Boolean = true,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -694,6 +706,16 @@ private fun ActionRow(
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
+        if (icon != null) {
+            androidx.compose.material3.Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(20.dp),
+            )
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 title,

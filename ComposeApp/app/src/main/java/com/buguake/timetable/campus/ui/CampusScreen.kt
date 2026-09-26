@@ -1,5 +1,7 @@
 package com.buguake.timetable.campus.ui
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -132,7 +134,7 @@ private fun CampusEntryCard(feature: CampusFeature, onClick: () -> Unit) {
                 )
             }
             Icon(
-                Icons.Filled.KeyboardArrowRight,
+                SketchChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

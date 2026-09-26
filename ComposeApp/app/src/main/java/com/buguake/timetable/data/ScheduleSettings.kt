@@ -61,7 +61,8 @@ data class ScheduleSettings(
  * Room 中的活动课表（多课表的唯一事实源 = activeTimetableId）。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class SettingsRepository private constructor(context: Context) {
+class SettingsRepository private constructor(context: Context) :
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("schedule_settings", Context.MODE_PRIVATE)
@@ -89,15 +90,17 @@ class SettingsRepository private constructor(context: Context) {
 
     val current: ScheduleSettings get() = _settings.value
 
-    /** 监听偏好变化 + 活动课表变化，任一变化都重算合并设置。 */
-    private val listener =
-        SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            prefsSettings = readPrefs()
-            recompute()
-        }
+    // 监听偏好变化 + 活动课表变化，任一变化都重算合并设置。
+    // 注意：SharedPreferences 只以【弱引用】持有 listener——必须由本单例自身实现接口并
+    // 注册 this（强引用与单例同生命周期）。若用独立 SAM lambda 存字段，该字段在 init 后
+    // 从未被读取，R8 会将其裁剪，弱引用随之被 GC，之后所有设置写入都不再刷新界面。
+    override fun onSharedPreferenceChanged(prefs: SharedPreferences?, key: String?) {
+        prefsSettings = readPrefs()
+        recompute()
+    }
 
     init {
-        prefs.registerOnSharedPreferenceChangeListener(listener)
+        prefs.registerOnSharedPreferenceChangeListener(this)
         scope.launch {
             // 首次磁盘读取全部移出主线程（构造期零 I/O）
             _activeTimetableId.value = prefs.getLong(KEY_ACTIVE_TIMETABLE, 1L)

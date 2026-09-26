@@ -12,16 +12,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -33,78 +29,83 @@ import java.io.File
 private val bgDecodeCache = object : android.util.LruCache<String, Bitmap>(2) {}
 
 /**
- * 磨砂玻璃原语（移植自 FU—Liquiglass 设计系统，Web → Compose）。
+ * 贴纸设计系统 · 表面原语。
  *
- * 玻璃 = 着色 tint + 1px 定向描边 + 定向高光（135° 顶部渐隐）；背景由
- * CustomBackgroundLayer 统一模糊+scrim，卡片只需轻着色即呈磨砂质感。
- * 层级约定：Air（chip，弱）< Glass（导航/卡片/标题舱/底栏，中）。
- * 高密度正文文字保持主题色可读，不做透明化——玻璃只用于界面层级。
+ * 历史上这里是磨砂玻璃实现；v1.6 贴纸风改版后，所有"玻璃面"统一渲染为
+ * 贴纸卡片：实色贴纸面 + 墨线描边 + 硬投影。保留原函数名与参数，
+ * 调用点无需改动即可整体换装。
  */
 enum class GlassLevel(val tintAlpha: Float) {
     Air(tintAlpha = 0.34f),
     Glass(tintAlpha = 0.46f),
 }
 
-/** 当前是否暗色主题（以 surface 亮度判断，供玻璃参数选择）。 */
+/** 当前是否暗色主题（以 surface 亮度判断）。 */
 @Composable
 fun isDarkTheme(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
+/** 贴纸描边色：亮色 = 墨线；暗色 = 中调灰紫（勾勒可辨但不刺眼）。 */
+@Composable
+fun stickerBorderColor(): Color = MaterialTheme.colorScheme.outline
+
+/** 贴纸硬投影色：亮色 = 墨线；暗色 = 比纸面更深的暗色（压出层次而非加亮）。 */
+@Composable
+fun stickerShadowColor(): Color =
+    if (isDarkTheme()) ShadowDark else MaterialTheme.colorScheme.outline
+
+/** 硬投影（贴纸语言）：在内容后方偏移 [offsetDp] 处画一圈墨色实心轮廓。 */
+internal fun Modifier.stickerShadow(
+    shape: androidx.compose.ui.graphics.Shape,
+    offsetDp: Float,
+    inkColor: Color,
+): Modifier = drawBehind {
+    val off = offsetDp.dp.toPx()
+    val outline = shape.createOutline(size, layoutDirection, this)
+    translate(off, off) {
+        when (val o = outline) {
+            is androidx.compose.ui.graphics.Outline.Rectangle -> drawRect(inkColor)
+            is androidx.compose.ui.graphics.Outline.Rounded ->
+                drawPath(androidx.compose.ui.graphics.Path().apply { addRoundRect(o.roundRect) }, inkColor)
+            is androidx.compose.ui.graphics.Outline.Generic -> drawPath(o.path, inkColor)
+        }
+    }
+}
+
 /**
- * 玻璃表面：半透明着色底 + 定向 1px 描边 + 顶部定向高光。
- * 覆盖层不拦截点击（无 pointerInput），内容交互不受影响。
+ * 贴纸表面：实色贴纸面 + 1.5dp 墨线描边 + 2dp 硬投影。
+ * 覆盖层不拦截点击，内容交互不受影响；tintAlpha 参数保留兼容调用点，已不再使用。
  */
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.large,
     level: GlassLevel = GlassLevel.Glass,
-    /** 覆盖等级着色强度（0..1）：底栏等需要更强"悬浮体感"的表面用。 */
-    tintAlpha: Float? = null,
+    /** 历史参数（磨砂玻璃着色强度），贴纸风下不再使用。 */
+    @Suppress("UNUSED_PARAMETER") tintAlpha: Float? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val dark = isDarkTheme()
-    val borderColor = if (dark) Color.White.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.60f)
-    val borderColorSoft = if (dark) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.14f)
-    val highlight = if (dark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.28f)
     Box(
         modifier
+            .stickerShadow(shape, offsetDp = 2f, inkColor = stickerShadowColor())
             .clip(shape)
-            .background(cs.surface.copy(alpha = tintAlpha ?: level.tintAlpha))
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(listOf(borderColor, borderColorSoft)),
-                shape = shape,
-            )
+            .background(cs.surfaceContainerLowest)
+            .border(width = 1.5.dp, color = stickerBorderColor(), shape = shape)
     ) {
-        // 定向高光：135° 自左上渐隐 + 右下角微弱回光（单一光源，避免塑料感均匀描边）
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.linearGradient(
-                        0f to highlight,
-                        0.38f to Color.Transparent,
-                    )
-                )
-        )
         content()
     }
 }
 
 /**
- * 实验性自定义背景层：图片铺满（Crop）+ 模糊 + surface 色 scrim 压暗/提亮，
- * 保证前景文字可读（先安静背景，再谈玻璃）。
- *
- * 玻璃模式正式化后：开启开关但未选图时，渲染内置品牌渐变（随亮/暗色系），
- * 不再透传内容露出主题窗底——那会让暗色模式的浅色文字叠在白底上不可读。
- * 模糊使用 RenderEffect（API 31+）；低版本自动退化为仅 scrim（可接受）。
+ * 纸面背景层：纸色打底（可选自定义图片直铺 + 轻遮罩保证前景可读）。
+ * 历史上的模糊/scrim/内置渐变光斑随磨砂玻璃一并退役。
  */
 @Composable
 fun CustomBackgroundLayer(
     enabled: Boolean,
     imagePath: String,
-    blurDp: Int,
+    /** 历史参数（模糊强度），贴纸风下不再使用。 */
+    @Suppress("UNUSED_PARAMETER") blurDp: Int = 0,
     content: @Composable () -> Unit,
 ) {
     if (!enabled) {
@@ -112,10 +113,8 @@ fun CustomBackgroundLayer(
         return
     }
     val cs = MaterialTheme.colorScheme
-    // 以文件 mtime 作为缓存键：覆盖选择新图后立即刷新（路径不变也能重解码）；
-    // 无图时 bitmap 为 null，走内置渐变。
-    // 解码在 IO 线程异步做（JPEG 解码落在首帧组合期是 v1.6 瓶颈 B2 之一）：
-    // 首帧先渲染下方内置渐变占位，解码完成后换图；进程级 LruCache 让回前台不再重解码。
+    // 以文件 mtime 作为缓存键：覆盖选择新图后立即刷新（路径不变也能重解码）。
+    // 解码在 IO 线程异步做：首帧先渲染纸色占位，解码完成后换图。
     val stamp = if (imagePath.isNotBlank()) File(imagePath).lastModified() else 0L
     val bitmap by produceState<Bitmap?>(null, imagePath, stamp) {
         if (imagePath.isBlank()) return@produceState
@@ -133,53 +132,12 @@ fun CustomBackgroundLayer(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .matchParentSize()
-                    .then(
-                        if (blurDp > 0) Modifier.blur(blurDp.coerceIn(1, 28).dp) else Modifier
-                    ),
+                modifier = Modifier.matchParentSize(),
             )
-            // scrim 随模糊强度递增：0dp 完全直显背景（不做白底遮挡），28dp 时 0.55
-            val scrimAlpha = 0.55f * (blurDp.coerceIn(0, 28) / 28f)
-            if (scrimAlpha > 0f) {
-                Box(Modifier.matchParentSize().background(cs.surface.copy(alpha = scrimAlpha)))
-            }
+            // 轻遮罩：贴纸卡片压在图片上仍需前景文字可读
+            Box(Modifier.matchParentSize().background(cs.surface.copy(alpha = 0.30f)))
         } else {
-            // 内置品牌渐变：底部明暗纵向过渡 + 多路「边缘光」径向高光。
-            // 光源分布刻意不均匀（左上主光最强，右上/底部渐弱），
-            // 每路光用带缓 stopping 的径向渐变做曲线衰减，避免线性渐变的均匀感。
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .drawBehind {
-                        val w = size.width
-                        val h = size.height
-                        val r = maxOf(w, h)
-                        drawRect(
-                            Brush.verticalGradient(
-                                listOf(cs.surfaceBright, cs.surfaceDim)
-                            )
-                        )
-                        // (中心, 半径, 颜色, 峰值强度)：径向曲线衰减 = 1 → 0.45 → 0.14 → 0
-                        fun glow(cx: Float, cy: Float, radius: Float, color: Color, peak: Float) {
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    0f to color.copy(alpha = peak),
-                                    0.25f to color.copy(alpha = peak * 0.45f),
-                                    0.55f to color.copy(alpha = peak * 0.14f),
-                                    1f to Color.Transparent,
-                                    center = Offset(cx, cy),
-                                    radius = radius,
-                                ),
-                                radius = radius,
-                                center = Offset(cx, cy),
-                            )
-                        }
-                        glow(w * 0.06f, h * 0.00f, r * 0.95f, cs.primaryContainer, 0.42f)   // 左上主光
-                        glow(w * 0.96f, h * 0.10f, r * 0.70f, cs.secondaryContainer, 0.26f) // 右上次光
-                        glow(w * 0.42f, h * 1.06f, r * 0.85f, cs.tertiaryContainer, 0.16f)  // 底部弱光
-                    }
-            )
+            Box(Modifier.matchParentSize().background(cs.surface))
         }
         content()
     }

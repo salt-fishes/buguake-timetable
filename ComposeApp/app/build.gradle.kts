@@ -57,7 +57,14 @@ android {
             }
         }
         release {
-            isMinifyEnabled = false
+            // R8 代码压缩 + 资源收缩（性能方案 P0-1）：DEX 缩小、应用自身类可被 AOT 全量编译，
+            // 冷启动 JIT 压力大幅下降；keep 规则见 proguard-rules.pro（WebView JS 桥等反射入口）
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             if (hasSigning) {
                 // 正式签名（密钥来自 keystore.properties，不在仓库）
                 signingConfig = signingConfigs.getByName("release")

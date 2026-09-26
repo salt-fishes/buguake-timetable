@@ -33,20 +33,20 @@ data class RepoDescriptor(
     /** 展示名。 */
     val label: String
         get() = when (id) {
-            OURS.id -> "本项目镜像（推荐）"
-            OFFICIAL.id -> "拾光官方"
+            OFFICIAL.id -> "拾光官方（推荐）"
+            OURS.id -> "本项目镜像"
             else -> "自定义"
         }
 
     companion object {
-        /** 本项目维护的镜像仓库：当前默认导入源。上游失效时在此先同步修复。 */
-        val OURS = RepoDescriptor("salt-fishes", "shiguang_warehouse")
-
-        /** 拾光官方上游仓库（上游恢复后可切换回去）。 */
+        /** 拾光官方上游仓库：默认导入源（社区生态主仓，适配最新鲜）。 */
         val OFFICIAL = RepoDescriptor("XingHeYuZhuan", "shiguang_warehouse")
 
-        /** 预置仓库（顺序即展示顺序：本项目镜像在上）。 */
-        val PRESETS = listOf(OURS, OFFICIAL)
+        /** 本项目维护的镜像仓库：官方上游失效时的备用源。 */
+        val OURS = RepoDescriptor("salt-fishes", "shiguang_warehouse")
+
+        /** 预置仓库（顺序即展示顺序：拾光官方在上）。 */
+        val PRESETS = listOf(OFFICIAL, OURS)
 
         /**
          * 从用户输入解析仓库：支持 "owner/name" 与完整 GitHub 仓库网址。
@@ -69,18 +69,18 @@ data class RepoDescriptor(
 /**
  * 导入源仓库的本地选择与自定义列表（SharedPreferences，非敏感）。
  *
- * 预置两项：本项目镜像（默认）与拾光官方上游；用户可另加自定义仓库。
+ * 预置两项：拾光官方上游（默认）与本项目镜像；用户可另加自定义仓库。
  * 索引与脚本缓存按仓库 id 隔离（filesDir/webimport/<owner>_<name>/），切换即换源，
- * 不需要清缓存。历史版本（v1.4/v1.5.0）固定使用官方仓库且无本设置，升级后默认
- * 切到本项目镜像——上游失效期间这是唯一可用源。
+ * 不需要清缓存。历史版本（v1.4/v1.5.0）固定使用官方仓库；曾短暂默认镜像，
+ * v1.6 起未手动选择过的用户恢复默认拾光官方。
  */
 class RepoStore private constructor(context: Context) {
 
     private val prefs = context.getSharedPreferences("webimport_repo", Context.MODE_PRIVATE)
 
-    /** 当前导入源（从未选择时为本项目镜像）。 */
+    /** 当前导入源（从未选择时为拾光官方上游）。 */
     fun selected(): RepoDescriptor =
-        prefs.getString(K_SELECTED, null)?.let { decode(it) } ?: RepoDescriptor.OURS
+        prefs.getString(K_SELECTED, null)?.let { decode(it) } ?: RepoDescriptor.OFFICIAL
 
     fun select(repo: RepoDescriptor) {
         prefs.edit().putString(K_SELECTED, encode(repo)).apply()

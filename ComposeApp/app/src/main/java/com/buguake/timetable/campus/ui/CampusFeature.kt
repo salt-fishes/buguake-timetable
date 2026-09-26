@@ -1,7 +1,7 @@
 package com.buguake.timetable.campus.ui
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
+import com.buguake.timetable.ui.theme.*
+
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.buguake.timetable.ui.theme.LockIcon
@@ -48,7 +48,7 @@ val CAMPUS_FEATURES: List<CampusFeature> = listOf(
         id = "exam",
         title = "考试安排",
         subtitle = "读取考试时间，可写入日历或导出",
-        icon = Icons.Filled.DateRange,
+        icon = SketchCalendar,
         content = { glass, showSnackbar, _, _, onBack ->
             CampusExamFeature(
                 glass = glass,

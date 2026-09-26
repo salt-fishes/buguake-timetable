@@ -35,7 +35,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -139,7 +139,10 @@ fun pageExitCloser(): ExitTransition =
 
 /**
  * 边缘侧滑退出：从左边缘横向拖动时整页跟手位移，超过页宽 1/3 松手即 [onBack]，
- * 否则弹簧回弹。内部滚动（纵向列表 / 横向 LazyRow）按主导方向判定，不受影响。
+ * 否则弹簧回弹。
+ * 手势在 Initial pass 判定（先于子内容）：武装前只看不消费，子内容（滚动/WebView）照常；
+ * 武装后消费事件，滚动与网页不再抢手势——保证所有二/三级页右滑返回行为一致。
+ * 已被外层侧滑消费的事件直接跳过，避免嵌套侧滑时双层位移。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -186,22 +189,30 @@ fun SwipeBackBox(
                     while (true) {
                         var finalDrag = -1f
                         awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial,
+                            )
                             var decided = false
                             var armed = false
                             var accX = 0f
                             var accY = 0f
                             while (true) {
-                                val event = awaitPointerEvent()
+                                val event = awaitPointerEvent(
+                                    androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                                )
                                 val change = event.changes.firstOrNull()
                                     ?: return@awaitEachGesture
+                                // 外层侧滑已接管：本层退出，不做双层位移
+                                if (!armed && change.isConsumed) return@awaitEachGesture
                                 if (!change.pressed) {
                                     if (armed) finalDrag = dragX
                                     break
                                 }
-                                if (!decided) {
-                                    accX += change.positionChange().x
-                                    accY += change.positionChange().y
+                                if (!armed) {
+                                    // 判定阶段用原始位移（无视子内容消费），只看不消费
+                                    accX += change.positionChangeIgnoreConsumed().x
+                                    accY += change.positionChangeIgnoreConsumed().y
                                     if (kotlin.math.abs(accX) > slop ||
                                         kotlin.math.abs(accY) > slop
                                     ) {
@@ -213,7 +224,9 @@ fun SwipeBackBox(
                                     }
                                 }
                                 if (armed) {
-                                    dragX = (dragX + change.positionChange().x).coerceAtLeast(0f)
+                                    dragX = (dragX + change.positionChangeIgnoreConsumed().x)
+                                        .coerceAtLeast(0f)
+                                    // Initial pass 消费：子内容（滚动/WebView）收不到该手势
                                     change.consume()
                                 }
                             }

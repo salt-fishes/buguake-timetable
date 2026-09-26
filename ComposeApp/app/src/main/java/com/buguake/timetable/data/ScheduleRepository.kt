@@ -182,6 +182,56 @@ class ScheduleRepository(private val dao: ScheduleDao) {
     }
 
     /**
+     * 按日期调课（落点直接覆盖）：把「fromWeek 的 fromDay」当天的课，调到「toWeek 的 toDay」。
+     * 典型场景：10月1日（第3周周三）的课调到10月3日（第3周周五），或跨周调（第3周周一 → 第5周周六）。
+     * - 覆盖落点：toWeek 的 toDay 上有课的条目剔除该周（剔空则整条删除）；
+     * - 搬运：fromDay 上含 fromWeek 的条目剔除 fromWeek（剔空则原位改为目标位置+目标周），
+     *   另建一条只含 toWeek、位于 toDay 的条目——源条目其余周次原样保留。
+     * 同日同周为空操作。
+     */
+    suspend fun moveDayBetweenWeeks(
+        timetableId: Long,
+        fromWeek: Int,
+        fromDay: Int,
+        toWeek: Int,
+        toDay: Int,
+    ) {
+        if (fromDay == toDay && fromWeek == toWeek) return
+        val all = dao.getAllEntries(timetableId)
+        fun weeksOf(csv: String) = csv.split(",").mapNotNull { it.trim().toIntOrNull() }
+
+        // 覆盖落点：目标位置上有课的条目让位
+        all.filter { it.dayOfWeek == toDay && toWeek in weeksOf(it.weeksCsv) }.forEach { t ->
+            val weeks = weeksOf(t.weeksCsv)
+            if (weeks.size <= 1) dao.deleteEntry(t.entryId)
+            else dao.updateEntryWeeks(t.entryId, weeks.filter { it != toWeek }.sorted().joinToString(","))
+        }
+        // 搬运源日当周的课
+        all.filter { it.dayOfWeek == fromDay && fromWeek in weeksOf(it.weeksCsv) }.forEach { s ->
+            val start = s.startSection ?: return@forEach
+            val end = s.endSection ?: start
+            val weeks = weeksOf(s.weeksCsv)
+            if (weeks.size <= 1) {
+                // 整条就是这一天：原地改成目标位置与目标周
+                dao.updateEntryTime(s.entryId, toDay, start, end)
+                dao.updateEntryWeeks(s.entryId, toWeek.toString())
+            } else {
+                dao.updateEntryWeeks(s.entryId, weeks.filter { it != fromWeek }.sorted().joinToString(","))
+                val entity = dao.getEntryById(s.entryId) ?: return@forEach
+                dao.insertEntry(
+                    entity.copy(
+                        id = 0,
+                        dayOfWeek = toDay,
+                        startSection = start,
+                        endSection = end,
+                        weeksCsv = toWeek.toString(),
+                    )
+                )
+            }
+        }
+    }
+
+    /**
      * 新增一条排课（课表内课程名已存在则复用，否则新建课程）。
      * @return 新增条目的 id
      */

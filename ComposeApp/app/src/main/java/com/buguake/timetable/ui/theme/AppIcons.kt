@@ -2,115 +2,77 @@ package com.buguake.timetable.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
-/** 锁图标（Material lock 几何，Apache 2.0；core 图标集不含，本地自绘）。 */
-val LockIcon: ImageVector by lazy {
+/**
+ * 纸绘风格图标（线稿）：1.8dp 圆头描边，不填充——像用笔在纸上勾出来的图形。
+ * 与贴纸设计系统的墨线描边语言一致；Icon 组件的 tint 会整体着色。
+ */
+internal fun sketchIcon(name: String, d: String): ImageVector =
     ImageVector.Builder(
-        name = "LockIcon",
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f,
-    ).apply {
-        path(
-            fill = SolidColor(Color.Black),
-            fillAlpha = 1f,
-        ) {
-            moveTo(18f, 8f)
-            lineToRelative(-1f, 0f)
-            lineTo(17f, 6f)
-            arcTo(5f, 5f, 0f, false, false, 12f, 1f)
-            arcTo(5f, 5f, 0f, false, false, 7f, 6f)
-            lineTo(7f, 8f)
-            lineTo(6f, 8f)
-            arcTo(2f, 2f, 0f, false, false, 4f, 10f)
-            lineTo(4f, 20f)
-            arcTo(2f, 2f, 0f, false, false, 6f, 22f)
-            lineToRelative(12f, 0f)
-            arcTo(2f, 2f, 0f, false, false, 20f, 20f)
-            lineTo(20f, 10f)
-            arcTo(2f, 2f, 0f, false, false, 18f, 8f)
-            close()
-            moveTo(12f, 17f)
-            arcTo(2f, 2f, 0f, false, false, 12f, 13f)
-            arcTo(2f, 2f, 0f, false, false, 12f, 17f)
-            close()
-            moveTo(15.1f, 8f)
-            lineTo(8.9f, 8f)
-            lineTo(8.9f, 6f)
-            arcTo(3.1f, 3.1f, 0f, false, true, 12f, 2.9f)
-            arcTo(3.1f, 3.1f, 0f, false, true, 15.1f, 6f)
-            close()
-        }
-    }.build()
-}
-
-/** 学校/校园图标（Material school 几何，Apache 2.0；core 图标集不含，本地自绘）。 */
-val CampusIcon: ImageVector by lazy {
-    ImageVector.Builder(
-        name = "CampusIcon",
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f,
-    ).apply {
-        path(
-            fill = SolidColor(Color.Black),
-            fillAlpha = 1f,
-        ) {
-            moveTo(12f, 3f)
-            lineTo(1f, 9f)
-            lineToRelative(4f, 2.18f)
-            verticalLineToRelative(6f)
-            lineTo(12f, 21f)
-            lineToRelative(7f, -3.82f)
-            verticalLineToRelative(-6f)
-            lineToRelative(2f, -1.09f)
-            verticalLineTo(17f)
-            horizontalLineToRelative(2f)
-            verticalLineTo(9f)
-            lineTo(12f, 3f)
-            close()
-            moveToRelative(6.82f, 6f)
-            lineTo(12f, 12.72f)
-            lineTo(5.18f, 9f)
-            lineTo(12f, 5.28f)
-            lineTo(18.82f, 9f)
-            close()
-            moveTo(17f, 15.99f)
-            lineToRelative(-5f, 2.73f)
-            lineToRelative(-5f, -2.73f)
-            verticalLineToRelative(-3.72f)
-            lineTo(12f, 15f)
-            lineToRelative(5f, -2.73f)
-            verticalLineToRelative(3.72f)
-            close()
-        }
-    }.build()
-}
-
-/** 洗衣机图标（Material local_laundry_service 几何，Apache 2.0；core 图标集不含，本地自绘）。 */
-val LaundryIcon: ImageVector by lazy {
-    // Material Symbols "local_laundry_service"（filled）官方路径，Apache 2.0
-    val body = "M9.17,16.83c1.56,1.56 4.1,1.56 5.66,0c1.56,-1.56 1.56,-4.1 0,-5.66L9.17,16.83z" +
-        "M20,2.01L4,2v20h16V2.01zM11.5,5c0.55,0 1,0.45 1,1s-0.45,1 -1,1s-1,-0.45 -1,-1" +
-        "S10.95,5 11.5,5zM8,5c0.55,0 1,0.45 1,1S8.55,7 8,7S7,6.55 7,6S7.45,5 8,5z" +
-        "M6,16.54V19h12v-2.46c-1.83,0.52 -2.4,2.46 -6,2.46S7.83,17.06 6,16.54z"
-    ImageVector.Builder(
-        name = "LaundryIcon",
+        name = name,
         defaultWidth = 24.dp,
         defaultHeight = 24.dp,
         viewportWidth = 24f,
         viewportHeight = 24f,
     ).apply {
         addPath(
-            pathData = PathParser().parsePathString(body).toNodes(),
-            fill = SolidColor(Color.Black),
-            fillAlpha = 1f,
+            pathData = PathParser().parsePathString(d).toNodes(),
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
         )
     }.build()
+
+/** 锁（纸绘线稿）。 */
+val LockIcon: ImageVector by lazy {
+    sketchIcon(
+        "LockIcon",
+        "M6.5,11 L6.5,20 L17.5,20 L17.5,11 Z M8.5,11 L8.5,7.5 A3.5,3.5 0 0 1 15.5,7.5 L15.5,11 M12,14 L12,16.5",
+    )
+}
+
+/** 学校/校园（纸绘线稿：学士帽）。 */
+val CampusIcon: ImageVector by lazy {
+    sketchIcon(
+        "CampusIcon",
+        "M2.5,9.5 L12,4.5 L21.5,9.5 L12,14.5 Z M6,12 L6,16.5 A6,6 0 0 0 18,16.5 L18,12 M21.5,9.5 L21.5,15",
+    )
+}
+
+/** 洗衣机（纸绘线稿：机身 + 滚筒）。 */
+val LaundryIcon: ImageVector by lazy {
+    sketchIcon(
+        "LaundryIcon",
+        "M5,3.5 L19,3.5 L19,20.5 L5,20.5 Z M5,8 L19,8 M8.2,5.8 L8.3,5.8 M11.2,5.8 L11.3,5.8 M12,10.3 A3.9,3.9 0 1 0 12,18.1 A3.9,3.9 0 1 0 12,10.3",
+    )
+}
+
+/** 课表（纸绘线稿：2×2 课程格）。 */
+val TimetableIcon: ImageVector by lazy {
+    sketchIcon(
+        "TimetableIcon",
+        "M4.5,4.5 L10,4.5 L10,10 L4.5,10 Z M14,4.5 L19.5,4.5 L19.5,10 L14,10 Z M4.5,14 L10,14 L10,19.5 L4.5,19.5 Z M14,14 L19.5,14 L19.5,19.5 L14,19.5 Z",
+    )
+}
+
+/** 今日（纸绘线稿：时钟）。 */
+val TodayIcon: ImageVector by lazy {
+    sketchIcon(
+        "TodayIcon",
+        "M12,4 A8,8 0 1 0 12,20 A8,8 0 1 0 12,4 M12,7.5 L12,12 L15.5,14",
+    )
+}
+
+/** 我的（纸绘线稿：人形）。 */
+val MineIcon: ImageVector by lazy {
+    sketchIcon(
+        "MineIcon",
+        "M12,4.8 A3.7,3.7 0 1 0 12,12.2 A3.7,3.7 0 1 0 12,4.8 M4.5,20.5 C4.5,16.4 7.9,13.9 12,13.9 C16.1,13.9 19.5,16.4 19.5,20.5",
+    )
 }

@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.mine
 
+import com.buguake.timetable.ui.theme.*
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -112,7 +114,7 @@ fun ReminderPage(
         // ---- 页头 ----
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(SketchArrowBack, contentDescription = "返回")
             }
             Text(
                 "课程提醒",

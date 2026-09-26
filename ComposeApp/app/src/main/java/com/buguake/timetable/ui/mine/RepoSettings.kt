@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.mine
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -98,7 +100,7 @@ fun RepoSettingsContent(
                             selectedId = repoStore.selected().id
                         }) {
                             Icon(
-                                Icons.Filled.Close,
+                                SketchClose,
                                 contentDescription = "删除自定义仓库",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

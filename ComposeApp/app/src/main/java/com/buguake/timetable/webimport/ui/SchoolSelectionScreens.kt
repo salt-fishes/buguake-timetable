@@ -1,5 +1,7 @@
 package com.buguake.timetable.webimport.ui
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -189,7 +191,7 @@ fun SchoolSelectionScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                     BasicTextFieldWithPlaceholder(
                         value = query,
@@ -209,12 +211,12 @@ fun SchoolSelectionScreen(
                                     strokeWidth = 2.dp,
                                 )
                             } else {
-                                Icon(Icons.Filled.Refresh, contentDescription = "刷新索引")
+                                Icon(SketchRefresh, contentDescription = "刷新索引")
                             }
                         }
                     }
                     IconButton(onClick = { }) {
-                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                        Icon(SketchSearch, contentDescription = "搜索")
                     }
                 }
             }
@@ -463,7 +465,7 @@ private fun RecentSchoolCard(school: SchoolData, onClick: () -> Unit, onRemove: 
             )
             IconButton(onClick = onRemove) {
                 Icon(
-                    Icons.Filled.Close,
+                    SketchClose,
                     contentDescription = "移除",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -521,7 +523,7 @@ fun AdapterSelectionScreen(
                 title = { Text(school.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

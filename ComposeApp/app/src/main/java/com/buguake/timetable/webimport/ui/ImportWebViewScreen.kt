@@ -1,5 +1,7 @@
 package com.buguake.timetable.webimport.ui
 
+import com.buguake.timetable.ui.theme.*
+
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -273,7 +275,7 @@ fun ImportWebViewScreen(
                         }
                     }) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            SketchArrowBack,
                             contentDescription = if (isEditingUrl) "取消输入网址" else "返回",
                         )
                     }
@@ -284,7 +286,7 @@ fun ImportWebViewScreen(
                             onClick = { goToUrl(urlInput) },
                             enabled = urlInput.trim().isNotBlank() && urlInput.trim() != "https://",
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "打开网址")
+                            Icon(SketchArrowForward, contentDescription = "打开网址")
                         }
                     } else {
                         // 有默认入口的适配器也要能改网址：教务域名随时可能变更
@@ -293,7 +295,7 @@ fun ImportWebViewScreen(
                             isEditingUrl = true
                             keyboard?.show()
                         }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "输入网址")
+                            Icon(SketchEdit, contentDescription = "输入网址")
                         }
                     }
                     // 桌面/手机模式切换：切 UA + 重载（Cookie 会话保留）

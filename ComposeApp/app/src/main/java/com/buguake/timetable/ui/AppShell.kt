@@ -33,9 +33,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -47,6 +44,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.buguake.timetable.ui.theme.CampusIcon
+import com.buguake.timetable.ui.theme.MineIcon
+import com.buguake.timetable.ui.theme.TimetableIcon
+import com.buguake.timetable.ui.theme.TodayIcon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,7 +64,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
@@ -172,6 +172,7 @@ private data class MoveReq(
     var showWidgetBind by rememberSaveable { mutableStateOf(false) }
     var widgetBindRefresh by remember { mutableIntStateOf(0) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
+    var showMoveCourse by rememberSaveable { mutableStateOf(false) }
     var showWebImport by rememberSaveable { mutableStateOf(false) }
     var pendingMove by remember { mutableStateOf<MoveReq?>(null) }
     var compareTimetables by remember { mutableStateOf<List<CompareTimetable>>(emptyList()) }
@@ -193,6 +194,7 @@ private data class MoveReq(
         showWidgetBind = false
         showCompare = false
         showWebImport = false
+        showMoveCourse = false
         selectedEntry = null
         editingEntry = null
     }
@@ -205,6 +207,7 @@ private data class MoveReq(
         showPrivacy = false
         showCompare = false
         showWebImport = false
+        showMoveCourse = false
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -698,13 +701,54 @@ private data class MoveReq(
                 // 拖动时直接跟手（dragPx 记录像素偏移），松手从当前位置连续吸附到最近槽位
                 val pillSlot = remember { Animatable(tab.toFloat()) }
                 var dragPx by mutableFloatStateOf(0f)
-                // 拖动跟手：基准值在拖动开始时同步冻结，偏移只随手指变化
+                // 切换编排（Pixel2Motion 动效纪律，贴纸品牌个性词：俏皮·跟手·软弹）：
+                // 预备 20%（胶囊沿移动方向拉伸压扁）→ 主动作 50%（位置中弹弹簧滑移）→
+                // 跟随 30%（形变回弹收尾，与图标 pop 的弹簧规格错开，避免同帧停住）
+                val pillStretchX = remember { Animatable(1f) }
+                val pillStretchY = remember { Animatable(1f) }
                 var isDragging by mutableStateOf(false)
                 var dragBase by mutableFloatStateOf(0f)
                 // 拖动经过槽位时的触感记录：每跨过一个槽位轻震一次
                 var lastTickSlot by mutableIntStateOf(tab)
                 LaunchedEffect(tab) {
-                    pillSlot.animateTo(tab.toFloat(), AppMotion.spatialFast())
+                    if (pillSlot.value != tab.toFloat()) {
+                        // 预备：先压后冲
+                        launch {
+                            pillStretchX.animateTo(
+                                1.24f,
+                                androidx.compose.animation.core.tween(70),
+                            )
+                            pillStretchX.animateTo(
+                                1f,
+                                androidx.compose.animation.core.spring(
+                                    dampingRatio = 0.5f,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                                ),
+                            )
+                        }
+                        launch {
+                            pillStretchY.animateTo(
+                                0.76f,
+                                androidx.compose.animation.core.tween(70),
+                            )
+                            pillStretchY.animateTo(
+                                1f,
+                                androidx.compose.animation.core.spring(
+                                    dampingRatio = 0.5f,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                                ),
+                            )
+                        }
+                        kotlinx.coroutines.delay(45)
+                    }
+                    // 主动作 + 跟随：软弹弹簧，带一次可见但收敛的过冲
+                    pillSlot.animateTo(
+                        tab.toFloat(),
+                        androidx.compose.animation.core.spring(
+                            dampingRatio = 0.62f,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                        ),
+                    )
                 }
                 // 水平内缩 8dp：悬浮岛两端是圆弧，胶囊若顶到槽位边缘会被弧线切到、
                 // 看起来像溢出导航条；内缩后首尾槽位的胶囊也完全落在弧线以内
@@ -727,6 +771,10 @@ private data class MoveReq(
                             }
                             .width(pillW)
                             .height(32.dp)
+                            .graphicsLayer {
+                                scaleX = pillStretchX.value
+                                scaleY = pillStretchY.value
+                            }
                             .clip(MaterialTheme.shapes.large)
                             .background(MaterialTheme.colorScheme.secondaryContainer),
                     )
@@ -780,10 +828,13 @@ private data class MoveReq(
                             }
                     ) {
                         TAB_LABELS.forEachIndexed { i, label ->
-                            // 选中图标轻微放大回弹，Expressive 空间弹簧驱动
+                            // 选中图标轻微放大回弹（软弹规格，与胶囊位移弹簧错拍收尾）
                             val iconScale by animateFloatAsState(
                                 targetValue = if (tab == i) 1.15f else 1f,
-                                animationSpec = AppMotion.spatial(),
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                                ),
                                 label = "tabScale$i",
                             )
                             // 选中/未选颜色平滑过渡（不再瞬变）
@@ -808,10 +859,10 @@ private data class MoveReq(
                             ) {
                                 Icon(
                                     when (i) {
-                                        0 -> Icons.Filled.Home
-                                        1 -> Icons.AutoMirrored.Filled.List
+                                        0 -> TimetableIcon
+                                        1 -> TodayIcon
                                         2 -> CampusIcon
-                                        else -> Icons.Filled.Settings
+                                        else -> MineIcon
                                     },
                                     contentDescription = label,
                                     tint = tabTint,
@@ -829,7 +880,7 @@ private data class MoveReq(
             }
             if (glassOn) {
                 // 悬浮岛底栏：居中紧凑胶囊（参考主流课表应用的浮动岛）——
-                // 两侧留空、内容从岛下方穿过，投影 + 加重玻璃底做出"浮在页面上"的体感；
+                // 两侧留空、内容从岛下方穿过，加重玻璃底做出"浮在页面上"的体感；
                 // 内部仍是同一套滑动胶囊 / 拖动换页 / 触感逻辑（固定 4×64dp 槽位）
                 Box(
                     Modifier
@@ -840,9 +891,7 @@ private data class MoveReq(
                 ) {
                     val barShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
                     com.buguake.timetable.ui.theme.GlassSurface(
-                        modifier = Modifier
-                            .width(272.dp)
-                            .shadow(elevation = 16.dp, shape = barShape),
+                        modifier = Modifier.width(272.dp),
                         shape = barShape,
                         tintAlpha = if (com.buguake.timetable.ui.theme.isDarkTheme()) 0.72f else 0.56f,
                     ) { BottomBarRow() }
@@ -911,6 +960,13 @@ private data class MoveReq(
                     },
                     onNewTimetable = { showNewTimetableDialog = true },
                     onOpenManage = { showTimetableManage = true },
+                    onOpenMoveCourse = {
+                        if (settings.semesterStartDate == null) {
+                            showSnackbar("请先在「我的」设置开学时间，才能按日期调课")
+                        } else {
+                            showMoveCourse = true
+                        }
+                    },
                 )
                 1 -> TodayScreen(
                     entries = entries,
@@ -1098,6 +1154,32 @@ private data class MoveReq(
                 AppRefresh.onDataChanged(context)
             },
             onBack = { showWidgetBind = false },
+        )
+    }
+
+    // ---- 按日期调课弹窗：选「被调日期 → 调到日期」，落点直接覆盖（无独立页面） ----
+    if (showMoveCourse) {
+        com.buguake.timetable.ui.timetable.MoveDayDialog(
+            semesterStart = settings.semesterStartDate,
+            onConfirm = { fromWeek, fromDay, toWeek, toDay ->
+                showMoveCourse = false
+                scope.launch {
+                    runCatching {
+                        kotlinx.coroutines.withContext(Dispatchers.IO) {
+                            scheduleRepo.moveDayBetweenWeeks(
+                                settings.timetableId, fromWeek, fromDay, toWeek, toDay,
+                            )
+                        }
+                    }.onSuccess {
+                        AppRefresh.onDataChanged(context)
+                        Haptics.heavy(context)
+                        showSnackbar("调课完成：第 $fromWeek 周周$fromDay → 第 $toWeek 周周$toDay，落点已覆盖")
+                    }.onFailure {
+                        showSnackbar("调课失败：${it.message ?: "未知错误"}")
+                    }
+                }
+            },
+            onDismiss = { showMoveCourse = false },
         )
     }
 

@@ -1,5 +1,7 @@
 package com.buguake.timetable.campus.ui
 
+import com.buguake.timetable.ui.theme.*
+
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -138,7 +140,7 @@ fun LaundryStorePicker(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(SketchArrowBack, contentDescription = "返回")
                 }
                 Text("选择门店", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
@@ -150,7 +152,7 @@ fun LaundryStorePicker(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
                 placeholder = { Text("输入完整学校/门店名") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                leadingIcon = { Icon(SketchSearch, contentDescription = null) },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
             )
@@ -167,7 +169,7 @@ fun LaundryStorePicker(
                     },
                     enabled = !locating,
                 ) {
-                    Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(SketchPin, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(if (locating) "定位中…" else "附近门店")
                 }

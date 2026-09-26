@@ -1,5 +1,7 @@
 package com.buguake.timetable.ui.timetable
 
+import com.buguake.timetable.ui.theme.*
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -330,7 +332,7 @@ fun ImportChooseDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    Icons.Filled.Check,
+                                    SketchCheck,
                                     contentDescription = null,
                                     tint = if (selected) MaterialTheme.colorScheme.primary
                                     else Color.Transparent,
@@ -409,7 +411,7 @@ fun TimetableManagePage(
                 title = { Text("课表管理") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -480,14 +482,14 @@ fun TimetableManagePage(
                     TextButton(onClick = { onCopy(t) }) { Text("复制") }
                     IconButton(onClick = { editTarget = t }) {
                         Icon(
-                            Icons.Filled.Edit,
+                            SketchEdit,
                             contentDescription = "编辑",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     IconButton(onClick = { deleteTarget = info }) {
                         Icon(
-                            Icons.Filled.Delete,
+                            SketchTrash,
                             contentDescription = "删除",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -568,7 +570,7 @@ fun WidgetBindPage(
                 title = { Text("桌面小组件") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(SketchArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

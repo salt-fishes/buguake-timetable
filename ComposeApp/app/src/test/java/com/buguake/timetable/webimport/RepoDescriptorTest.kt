@@ -37,9 +37,10 @@ class RepoDescriptorTest {
     }
 
     @Test
-    fun presetsOrderOursFirst() {
-        // 本项目镜像必须在预选第一位（当前默认源），官方上游第二
-        assertEquals(RepoDescriptor.OURS, RepoDescriptor.PRESETS.first())
+    fun presetsOrderOfficialFirst() {
+        // v1.6 起默认导入源 = 拾光官方上游（预置第一位），本项目镜像为备用源
+        assertEquals(RepoDescriptor.OFFICIAL, RepoDescriptor.PRESETS.first())
+        assertEquals("XingHeYuZhuan_shiguang_warehouse", RepoDescriptor.OFFICIAL.id)
         assertEquals("salt-fishes_shiguang_warehouse", RepoDescriptor.OURS.id)
     }
 }

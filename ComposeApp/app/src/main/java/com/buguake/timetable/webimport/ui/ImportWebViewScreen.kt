@@ -1,5 +1,6 @@
 package com.buguake.timetable.webimport.ui
 
+import com.buguake.timetable.ui.SystemPrompt
 import com.buguake.timetable.ui.theme.*
 
 import android.annotation.SuppressLint
@@ -98,7 +99,6 @@ fun ImportWebViewScreen(
     val scope = rememberCoroutineScope()
     val settingsRepo = remember { SettingsRepository.getInstance(context) }
     val scheduleRepo = remember { ScheduleRepository.getInstance(context) }
-    val snackbarHostState = remember { SnackbarHostState() }
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableStateOf(0) }
@@ -154,12 +154,12 @@ fun ImportWebViewScreen(
                     dialog = BridgeDialog.SingleSelection(title, items, defaultSelectedIndex, onResult)
                 }
             },
-            showToast = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+            showToast = { msg -> SystemPrompt.toast(context, msg) },
             evaluateJs = ::evaluateJs,
             settingsRepo = settingsRepo,
             scheduleRepo = scheduleRepo,
             onTaskCompleted = {
-                scope.launch { snackbarHostState.showSnackbar("导入任务完成，已返回") }
+                SystemPrompt.toast(context, "导入任务完成，已返回")
                 AppRefresh.onDataChanged(context)
                 onFinished()
             },
@@ -217,9 +217,7 @@ fun ImportWebViewScreen(
         val wv = webViewRef
         if (wv == null || currentUrl.isBlank() || currentUrl == "about:blank") {
             // 还没进任何教务页面就注入，脚本找不到页面元素会静默失败——先把原因说清楚
-            scope.launch {
-                snackbarHostState.showSnackbar("请先在上方地址栏打开本校教务系统并登录，再执行导入")
-            }
+            SystemPrompt.toast(context, "请先在上方地址栏打开本校教务系统并登录，再执行导入")
             if (!isEditingUrl) {
                 urlInput = currentUrl
                 isEditingUrl = true
@@ -228,11 +226,10 @@ fun ImportWebViewScreen(
         }
         injectedAtTable = tableId
         evaluateJs("window.currentTableId = '$tableId';\n$jsContent", null)
-        scope.launch { snackbarHostState.showSnackbar("已注入适配器脚本，正在执行…") }
+        SystemPrompt.toast(context, "已注入适配器脚本，正在执行…")
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,
         topBar = {
@@ -341,7 +338,7 @@ fun ImportWebViewScreen(
                             CookieManager.getInstance().removeAllCookies(null)
                             CookieManager.getInstance().flush()
                             webViewRef?.reload()
-                            scope.launch { snackbarHostState.showSnackbar("已清除登录会话") }
+                            SystemPrompt.toast(context, "已清除登录会话")
                         },
                         modifier = Modifier.weight(1f),
                     ) { Text("清除登录") }
@@ -432,123 +429,58 @@ fun ImportWebViewScreen(
             },
             onDismiss = { showTablePicker = false },
             onCreated = { _, name ->
-                scope.launch { snackbarHostState.showSnackbar("已新建《$name》，正在导入课程…") }
+                SystemPrompt.toast(context, "已新建《$name》，正在导入课程…")
             },
         )
     }
 
-    // ---- 桥弹窗 ----
-    when (val d = dialog) {
-        is BridgeDialog.Alert -> AlertDialog(
-            onDismissRequest = {
-                dialog = null
-                d.onResult(false)
-            },
-            title = { Text(d.title) },
-            text = { Text(d.content) },
-            confirmButton = {
-                TextButton(onClick = { dialog = null; d.onResult(true) }) { Text(d.confirmText) }
-            },
-            dismissButton = {
-                TextButton(onClick = { dialog = null; d.onResult(false) }) { Text("取消") }
-            },
-        )
+    // ---- 桥弹窗：全部交给系统（框架）对话框 ----
+    // 独立窗口 + ROM 原生样式：WebView 之上不会被页面内容遮挡，页面也没法把它伪装成应用自己的弹窗。
+    // 对话框实例与 Compose 状态同生命周期：状态清空即 dismiss，页面退出不残留窗口。
+    val activeDialog = dialog
+    if (activeDialog != null) {
+        val dark = isDarkTheme()
+        DisposableEffect(activeDialog) {
+            val built = when (activeDialog) {
+                is BridgeDialog.Alert -> SystemPrompt.alert(
+                    context = context,
+                    dark = dark,
+                    title = activeDialog.title,
+                    message = activeDialog.content,
+                    confirmText = activeDialog.confirmText,
+                    cancelText = "取消",
+                    onClose = { dialog = null },
+                    onResult = activeDialog.onResult,
+                )
 
-        is BridgeDialog.Prompt -> PromptDialog(
-            state = d,
-            onClose = { dialog = null },
-            onCancel = {
-                dialog = null
-                d.onCancel()
-            },
-        )
+                is BridgeDialog.Prompt -> SystemPrompt.input(
+                    context = context,
+                    dark = dark,
+                    title = activeDialog.title,
+                    tip = activeDialog.tip,
+                    defaultText = activeDialog.defaultText,
+                    onSubmit = activeDialog.onSubmit,
+                    onClose = { dialog = null },
+                    onCancel = {
+                        dialog = null
+                        activeDialog.onCancel()
+                    },
+                )
 
-        is BridgeDialog.SingleSelection -> SingleSelectionDialog(
-            state = d,
-            onClose = { dialog = null },
-            onCancel = {
-                dialog = null
-                d.onResult(null)
-            },
-        )
-
-        null -> {}
-    }
-}
-
-@Composable
-private fun PromptDialog(state: BridgeDialog.Prompt, onClose: () -> Unit, onCancel: () -> Unit) {
-    var text by remember(state) { mutableStateOf(state.defaultText) }
-    var error by remember(state) { mutableStateOf<String?>(null) }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(state.title) },
-        text = {
-            Column {
-                if (state.tip.isNotBlank()) {
-                    Text(
-                        state.tip,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it; error = null },
-                    isError = error != null,
-                    supportingText = { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                is BridgeDialog.SingleSelection -> SystemPrompt.singleChoice(
+                    context = context,
+                    dark = dark,
+                    title = activeDialog.title,
+                    items = activeDialog.items,
+                    defaultSelectedIndex = activeDialog.defaultSelectedIndex,
+                    onClose = { dialog = null },
+                    onResult = activeDialog.onResult,
                 )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                // 校验失败经 onValidationError 回显错误、弹窗保持打开；成功后 onClose 关闭
-                state.onSubmit(text, { err -> error = err }, onClose)
-            }) { Text("确定") }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text("取消") } },
-    )
-}
-
-@Composable
-private fun SingleSelectionDialog(
-    state: BridgeDialog.SingleSelection,
-    onClose: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    var selected by remember(state) { mutableStateOf(state.defaultSelectedIndex) }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(state.title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                state.items.forEachIndexed { i, item ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { selected = i }
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = selected == i, onClick = { selected = i })
-                        Text(item, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onClose()
-                state.onResult(selected.takeIf { it >= 0 })
-            }) {
-                Text("确定")
-            }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text("取消") } },
-    )
+            built.show()
+            onDispose { if (built.isShowing) built.dismiss() }
+        }
+    }
 }
 
 /**

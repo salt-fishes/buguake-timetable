@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,8 +40,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -127,6 +126,9 @@ private data class MoveReq(
         )
     @Composable
     fun AppRoot() {
+    // 系统「动画时长缩放」→ AppMotion：用户在开发者选项/无障碍里关掉动画时，
+    // 全应用自定义动效瞬时完成（含底栏胶囊、页签转场、二级页缩放）
+    com.buguake.timetable.ui.theme.RememberSystemMotion()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settingsRepo = remember { SettingsRepository.getInstance(context) }
@@ -210,13 +212,9 @@ private data class MoveReq(
         showMoveCourse = false
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    val showSnackbar: (String) -> Unit = { msg ->
-        scope.launch {
-            snackbarHostState.showSnackbar(msg)
-        }
-    }
+    // 全应用提示统一走系统 Toast（不再用 Snackbar）：二级覆盖页、WebView 之上都能看到，
+    // 也不会被页面内容或滚动区遮挡。下游沿用 showSnackbar 这个名字，换的只是出口
+    val showSnackbar: (String) -> Unit = { msg -> SystemPrompt.toast(context, msg) }
 
     // ---- 设置动作 ----
     val setSemesterStart: (java.time.LocalDate) -> Unit = { date ->
@@ -230,6 +228,8 @@ private data class MoveReq(
     // ---- 背景图导入（系统照片选择器 Photo Picker：零权限，旧版本自动回退 SAF）
     //      选图后走系统原生裁剪（按屏幕比例），无系统裁剪组件时回退应用内裁剪 ----
     var pendingCropSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    // 系统裁剪拿不到结果时的兜底源图（就是选图时那一张，已降采样到 ≤2048）
+    var cropFallbackSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     // 裁剪结果（系统裁剪输出文件）→ 落盘为背景并刷新
     suspend fun saveBackground(cropped: android.graphics.Bitmap) {
@@ -270,8 +270,21 @@ private data class MoveReq(
                         android.graphics.BitmapFactory.decodeFile(outFile.absolutePath)
                             ?: error("裁剪结果为空")
                     }
-                }.onSuccess { bmp -> saveBackground(bmp) }
-                    .onFailure { e -> showSnackbar("无法读取图片：${e.message ?: "未知错误"}") }
+                }.onSuccess { bmp ->
+                    cropFallbackSource = null
+                    saveBackground(bmp)
+                }
+                    .onFailure { e ->
+                        // 有些 ROM 不支持 com.android.camera.action.CROP，或裁剪应用不回写输出文件：
+                        // 这时改用应用内裁剪（源图还在手上），而不是把用户堵在一句报错上
+                        val fallback = cropFallbackSource
+                        if (fallback != null) {
+                            showSnackbar("系统裁剪不可用，改用应用内裁剪")
+                            pendingCropSource = fallback
+                        } else {
+                            showSnackbar("无法读取图片：${e.message ?: "未知错误"}")
+                        }
+                    }
             }
         }
     }
@@ -290,7 +303,15 @@ private data class MoveReq(
         )
         val intent = android.content.Intent("com.android.camera.action.CROP").apply {
             setDataAndType(inUri, "image/*")
+            // 输入读 + 输出写：两个授权都必须给。只给 READ 时，裁剪应用无法写入
+            // EXTRA_OUTPUT 指向的 FileProvider Uri（华为等 ROM 直接失败），输出文件为空
+            // → 回到本应用 decodeFile 得到 null，表现为"裁剪后无法保存"。
+            // clipData 里同时带上进出的 Uri，是各 ROM 兼容性最好的写法。
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            clipData = android.content.ClipData
+                .newUri(context.contentResolver, "crop_in", inUri)
+                .apply { addItem(android.content.ClipData.Item(outUri)) }
             putExtra("crop", "true")
             putExtra("scale", true)
             putExtra("aspectX", w)
@@ -324,7 +345,10 @@ private data class MoveReq(
                         }
                         bmp
                     }
-                }.onSuccess { bmp -> launchSystemCrop(bmp) }
+                }.onSuccess { bmp ->
+                    cropFallbackSource = bmp
+                    launchSystemCrop(bmp)
+                }
                     .onFailure { e -> showSnackbar("无法读取图片：${e.message ?: "未知错误"}") }
             }
         }
@@ -332,9 +356,13 @@ private data class MoveReq(
     pendingCropSource?.let { src ->
         BackgroundCropDialog(
             source = src,
-            onDismiss = { pendingCropSource = null },
+            onDismiss = {
+                pendingCropSource = null
+                cropFallbackSource = null
+            },
             onConfirm = { cropped ->
                 pendingCropSource = null
+                cropFallbackSource = null
                 scope.launch { saveBackground(cropped) }
             },
         )
@@ -672,8 +700,12 @@ private data class MoveReq(
 
     com.buguake.timetable.ui.theme.ComposeAppTheme(
         darkTheme = darkTheme,
-        dynamicColor = settings.dynamicColor && android.os.Build.VERSION.SDK_INT >= 31,
+        themeColorMode = settings.themeColorMode,
+        themeSeedColor = settings.themeSeedColor,
+        themeTextColor = settings.themeTextColor,
     ) {
+        // 圆形主题切换宿主：记录触点 + 承载「旧主题快照」遮罩（只组合一份界面）
+        com.buguake.timetable.ui.theme.ThemeRevealHost {
         // 实验性：自定义背景层包裹整个 Scaffold（含底栏），玻璃风格随开关生效
         val glassOn = settings.customBgEnabled
         com.buguake.timetable.ui.theme.CustomBackgroundLayer(
@@ -697,21 +729,40 @@ private data class MoveReq(
         bottomBar = {
             // 迷你底栏：56dp 高，图标 + 选中态胶囊；玻璃模式下半透明 + 顶部细描边
             @Composable fun BottomBarRow() {
-                // 胶囊位置以「槽位下标」为单位的连续值：点击/跳转时从当前位置弹簧到目标；
-                // 拖动时直接跟手（dragPx 记录像素偏移），松手从当前位置连续吸附到最近槽位
-                val pillSlot = remember { Animatable(tab.toFloat()) }
-                var dragPx by mutableFloatStateOf(0f)
+                // 胶囊位置唯一真源（槽位单位的连续值）。点击、拖动、松手吸附都只写它一个。
+                // 旧实现把拖动位置拆成「isDragging ? dragBase + dragPx : pillSlot.value」两个分支，
+                // 而且 dragPx / isDragging / dragBase 都没 remember——拖动中一旦发生重组，手指写的
+                // 就是被丢弃的旧状态对象，画面便一直停在起点，直到松手改 tab 才一次性跳到终点。
+                var pillPos by remember { mutableFloatStateOf(tab.toFloat()) }
+                // 位置在组合期读取（见下方 pillLeftPx）：拖动每帧都重组，视觉严格跟手，
+                // 不再依赖「放置期才读」的延迟读取路径
+                // 拖动中 / 本次 tab 变化是否来自拖动落位 / 打断在途动画的令牌
+                var dragging by remember { mutableStateOf(false) }
+                var settledByDrag by remember { mutableStateOf(false) }
+                var dragToken by remember { mutableIntStateOf(0) }
+                var settleNonce by remember { mutableIntStateOf(0) }
+                // 抓取点：手指落在胶囊内的横向偏移（px）。逐帧用「手指绝对位置 − 抓取点」反算位置，
+                // 而不是累计增量——增量在 slop 判定时会丢掉一段，丢帧后误差还会继续累积
+                var grabDx by remember { mutableFloatStateOf(0f) }
                 // 切换编排（Pixel2Motion 动效纪律，贴纸品牌个性词：俏皮·跟手·软弹）：
                 // 预备 20%（胶囊沿移动方向拉伸压扁）→ 主动作 50%（位置中弹弹簧滑移）→
                 // 跟随 30%（形变回弹收尾，与图标 pop 的弹簧规格错开，避免同帧停住）
                 val pillStretchX = remember { Animatable(1f) }
                 val pillStretchY = remember { Animatable(1f) }
-                var isDragging by mutableStateOf(false)
-                var dragBase by mutableFloatStateOf(0f)
                 // 拖动经过槽位时的触感记录：每跨过一个槽位轻震一次
-                var lastTickSlot by mutableIntStateOf(tab)
-                LaunchedEffect(tab) {
-                    if (pillSlot.value != tab.toFloat()) {
+                var lastTickSlot by remember { mutableIntStateOf(tab) }
+                // 位置动画的唯一驱动：tab 变化（点击 / 快捷方式跳转 / 拖动落位）或 settleNonce 自增。
+                // dragToken 参与 key——拖动一起手就重启本效应，立刻放弃在途动画，位置全交给手指
+                LaunchedEffect(tab, dragToken, settleNonce) {
+                    // 先消费「来自拖动落位」标记：即使这次重启是被拖动打断的，
+                    // 也不把标记留给下一次点击，否则下一次点击会少掉「预备」拉伸
+                    val fromDrag = settledByDrag
+                    settledByDrag = false
+                    if (dragging) return@LaunchedEffect
+                    // 拖动落位时落点已由手指决定：跳过「预备」拉伸，直接连续吸附到槽位
+                    val choreograph = !fromDrag && AppMotion.enabled &&
+                        pillPos != tab.toFloat()
+                    if (choreograph) {
                         // 预备：先压后冲
                         launch {
                             pillStretchX.animateTo(
@@ -720,10 +771,7 @@ private data class MoveReq(
                             )
                             pillStretchX.animateTo(
                                 1f,
-                                androidx.compose.animation.core.spring(
-                                    dampingRatio = 0.5f,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-                                ),
+                                AppMotion.bouncy(),
                             )
                         }
                         launch {
@@ -733,22 +781,17 @@ private data class MoveReq(
                             )
                             pillStretchY.animateTo(
                                 1f,
-                                androidx.compose.animation.core.spring(
-                                    dampingRatio = 0.5f,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-                                ),
+                                AppMotion.bouncy(),
                             )
                         }
                         kotlinx.coroutines.delay(45)
                     }
-                    // 主动作 + 跟随：软弹弹簧，带一次可见但收敛的过冲
-                    pillSlot.animateTo(
-                        tab.toFloat(),
-                        androidx.compose.animation.core.spring(
-                            dampingRatio = 0.62f,
-                            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-                        ),
-                    )
+                    // 主动作 + 跟随：软弹弹簧，带一次可见但收敛的过冲（拖动落位用快速规格收尾）
+                    animate(
+                        initialValue = pillPos,
+                        targetValue = tab.toFloat(),
+                        animationSpec = if (choreograph) AppMotion.spatial() else AppMotion.spatialFast(),
+                    ) { value, _ -> pillPos = value }
                 }
                 // 水平内缩 8dp：悬浮岛两端是圆弧，胶囊若顶到槽位边缘会被弧线切到、
                 // 看起来像溢出导航条；内缩后首尾槽位的胶囊也完全落在弧线以内
@@ -758,17 +801,14 @@ private data class MoveReq(
                     val pillW = 48.dp
                     val pillInsetPx = with(LocalDensity.current) { ((slot - pillW) / 2).toPx() }
                     // 滑移胶囊：绘制在图标层【之下】，仅作视觉指示，不拦截点击；
-                    // CenterStart 对齐后再做横向偏移，否则默认 TopStart 会顶到导航条上沿
+                    // CenterStart 对齐后再做横向偏移，否则默认 TopStart 会顶到导航条上沿。
+                    // 偏移在组合期算好：拖动每帧都重组 → 每帧都会重新放置，
+                    // 不会出现"状态已经变了、画面还停在原处"（旧实现只写在放置期读取的 lambda 里）
+                    val pillLeftPx = pillInsetPx + pillPos * slotPx
                     Box(
                         Modifier
                             .align(Alignment.CenterStart)
-                            .offset {
-                                val base = if (isDragging) dragBase else pillSlot.value
-                                IntOffset(
-                                    (slotPx * base + pillInsetPx + dragPx).roundToInt(),
-                                    0,
-                                )
-                            }
+                            .offset { IntOffset(pillLeftPx.roundToInt(), 0) }
                             .width(pillW)
                             .height(32.dp)
                             .graphicsLayer {
@@ -780,46 +820,43 @@ private data class MoveReq(
                     )
                     // 图标与胶囊用同一套槽位公式：每槽位宽度 = slot，图标居中，
                     // 整槽位可点（比 64dp 胶囊点击区域大，且不会互相遮挡）；
-                    // 横向拖动跟手移动胶囊，点击（未过滑动阈值）仍走各槽位的 clickable
-                    // 拖动期间胶囊位置只由「拖动起点 + 手指位移」决定（基准同步冻结），
-                    // 与可能仍在进行的弹簧动画完全解耦——否则动画推进叠加手指位移会感觉不跟手；
-                    // onDragCancel 与 onDragEnd 同等处理，避免手势被打断后 dragPx 残留、胶囊卡在半路
+                    // 横向拖动跟手移动胶囊，点击（未过滑动阈值）仍走各槽位的 clickable。
+                    // 落位只改 tab 与位置真源，位移动画交给上方 LaunchedEffect——
+                    // 不再"先清偏移、再在协程里补 snapTo"，也就没有松手瞬间回跳一帧再飞出去的残影；
+                    // onDragCancel 与 onDragEnd 同等处理，避免手势被打断后胶囊卡在半路
                     fun settleDrag() {
-                        if (!isDragging) return
-                        isDragging = false
-                        val from = dragBase + dragPx / slotPx
-                        val target = from.roundToInt().coerceIn(0, TAB_LABELS.lastIndex)
-                        dragPx = 0f
+                        if (!dragging) return
+                        dragging = false
+                        val target = pillPos.roundToInt().coerceIn(0, TAB_LABELS.lastIndex)
                         Haptics.tick(context)  // 松手吸附触感
                         lastTickSlot = target
-                        scope.launch {
-                            pillSlot.snapTo(from)
-                            if (target == tab) {
-                                pillSlot.animateTo(target.toFloat(), AppMotion.spatialFast())
-                            }
-                        }
-                        tab = target  // 变化时由 LaunchedEffect 弹簧到目标
+                        settledByDrag = true
+                        // 落点与当前页不同：改 tab 即触发落位动画；相同则用 nonce 触发同一段动画
+                        if (target != tab) tab = target else settleNonce++
                     }
                     Row(
                         Modifier
                             .fillMaxSize()
                             .pointerInput(Unit) {
                                 detectHorizontalDragGestures(
-                                    onDragStart = {
-                                        isDragging = true
-                                        dragBase = pillSlot.value
-                                        lastTickSlot = dragBase.roundToInt()
+                                    onDragStart = { down ->
+                                        dragging = true
+                                        dragToken++  // 放弃在途的胶囊动画，位置立即交给手指
+                                        // 抓取点 = 手指落在胶囊内的横向偏移：
+                                        // 按在胶囊哪一点，拖起来就还在那一点（胶囊不会突然跳到手指下）
+                                        grabDx = down.x - (pillInsetPx + pillPos * slotPx)
+                                        lastTickSlot = pillPos.roundToInt()
                                         Haptics.tick(context)  // 拖动开始轻震
-                                        scope.launch { pillSlot.stop() }
                                     },
                                     onDragEnd = { settleDrag() },
                                     onDragCancel = { settleDrag() },
-                                ) { change, dragAmount ->
+                                ) { change, _ ->
                                     change.consume()
-                                    val range = slotPx * (TAB_LABELS.size - 1)
-                                    dragPx = (dragPx + dragAmount).coerceIn(-range, range)
+                                    // 逐帧由手指绝对位置反算胶囊位置：slop 判定之前的那段位移也一并算进来
+                                    pillPos = ((change.position.x - grabDx - pillInsetPx) / slotPx)
+                                        .coerceIn(0f, (TAB_LABELS.size - 1).toFloat())
                                     // 拖动每跨过一个槽位：轻震一格
-                                    val hoveredSlot = (dragBase + dragPx / slotPx).roundToInt()
+                                    val hoveredSlot = pillPos.roundToInt()
                                     if (hoveredSlot != lastTickSlot && hoveredSlot in TAB_LABELS.indices) {
                                         lastTickSlot = hoveredSlot
                                         Haptics.tick(context)
@@ -831,10 +868,7 @@ private data class MoveReq(
                             // 选中图标轻微放大回弹（软弹规格，与胶囊位移弹簧错拍收尾）
                             val iconScale by animateFloatAsState(
                                 targetValue = if (tab == i) 1.15f else 1f,
-                                animationSpec = androidx.compose.animation.core.spring(
-                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-                                ),
+                                animationSpec = AppMotion.bouncy(),
                                 label = "tabScale$i",
                             )
                             // 选中/未选颜色平滑过渡（不再瞬变）
@@ -1006,6 +1040,11 @@ private data class MoveReq(
                     onSetMoveScope = { settingsRepo.setMoveScope(it) },
                     onSetDynamicColor = { settingsRepo.setDynamicColor(it) },
                     onSetDarkMode = { settingsRepo.setDarkMode(it) },
+                    onSetThemeColor = { mode, brand, text ->
+                        settingsRepo.setThemeColorMode(mode)
+                        settingsRepo.setThemeSeedColor(brand)
+                        settingsRepo.setThemeTextColor(text)
+                    },
                     onOpenSectionTimes = { showSectionTimes = true },
                     onOpenReminders = { showReminders = true },
                     onSetCustomBgEnabled = { settingsRepo.setCustomBgEnabled(it) },
@@ -1469,14 +1508,6 @@ private data class MoveReq(
         )
     }
 
-        // 全局 Snackbar：挂在根 Box 顶层，浮在主界面与所有二级页之上
-        SnackbarHost(
-            snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 72.dp),
-        )
         }  // Box(fillMaxSize)
     }  // CustomBackgroundLayer
 
@@ -1566,6 +1597,7 @@ private data class MoveReq(
             onDismiss = { showAddCourse = false; addCoursePrefill = null },
         )
     }
+    }  // ThemeRevealHost
     }
 }
 

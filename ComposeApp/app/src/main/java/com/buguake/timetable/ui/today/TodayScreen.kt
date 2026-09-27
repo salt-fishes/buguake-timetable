@@ -237,10 +237,11 @@ private fun OngoingCard(
             if (span != null) {
                 val fraction = ((nowMinutes - span.first).toFloat() / (span.second - span.first))
                     .coerceIn(0f, 1f)
-                // 进度条平滑流动，剩余分钟数字滚动，不再逐帧跳变
+                // 进度条平滑流动，剩余分钟数字滚动，不再逐帧跳变。
+                // 用单调规格而非弹簧：弹簧会瞬时冲过 100% 再回落，进度不该出现这种"课时变长"的错觉
                 val animatedFraction by androidx.compose.animation.core.animateFloatAsState(
                     targetValue = fraction,
-                    animationSpec = AppMotion.spatial(),
+                    animationSpec = AppMotion.monotonic(),
                     label = "classProgress",
                 )
                 LinearProgressIndicator(

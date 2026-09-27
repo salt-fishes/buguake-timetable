@@ -1,8 +1,6 @@
 package com.buguake.timetable.webimport.ui
 
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.animation.togetherWith
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.buguake.timetable.ui.SystemPrompt
 import com.buguake.timetable.ui.timetable.TimetableInfo
 import com.buguake.timetable.webimport.AdapterData
 import com.buguake.timetable.webimport.SchoolData
@@ -48,7 +47,6 @@ fun WebImportFlow(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { SchoolIndexStore.getInstance(context) }
-    val snackbar = remember { SnackbarHostState() }
 
     var step by remember { mutableStateOf<Step>(Step.School) }
     var index by remember { mutableStateOf(store.loadCached()) }
@@ -93,7 +91,6 @@ fun WebImportFlow(
             index = index,
             loading = loading,
             error = error,
-            snackbarHostState = snackbar,
             onSelectSchool = { step = Step.Adapter(it) },
             onRefresh = { scope.launch { refreshIndex(force = true) } },
             onBack = onClose,
@@ -102,7 +99,7 @@ fun WebImportFlow(
 
         is Step.Adapter -> AdapterSelectionScreen(
             school = s.school,
-            snackbarHostState = snackbar,
+            loading = loading,
             onSelectAdapter = { adapter ->
                 scope.launch {
                     loading = true
@@ -113,7 +110,7 @@ fun WebImportFlow(
                         }
                         .onFailure { e ->
                             loading = false
-                            snackbar.showSnackbar("适配器脚本获取失败：${e.message}")
+                            SystemPrompt.toast(context, "适配器脚本获取失败：${e.message}")
                         }
                 }
             },

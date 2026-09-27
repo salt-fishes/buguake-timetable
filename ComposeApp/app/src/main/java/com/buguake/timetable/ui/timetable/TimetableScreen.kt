@@ -599,15 +599,16 @@ fun TimetableScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                androidx.compose.material3.Slider(
-                    value = panelWeek,
-                    onValueChange = { panelWeek = it },
-                    onValueChangeFinished = {
+                // 带惯性吸附：甩得快会先滑过目标刻度再被吸回，慢速松手直接吸附、不过冲；
+                // 落定后才切页 + 轻震（拖动过程只更新周次数字预览）
+                WeekSnapSlider(
+                    week = panelWeek.toInt(),
+                    range = sliderMin.toInt()..sliderMax.toInt(),
+                    onPreview = { panelWeek = it.toFloat() },
+                    onSettle = { week ->
                         Haptics.tick(context)  // 周次落定轻震
-                        scope.launch { pagerState.animateScrollToPage(panelWeek.toInt() - minWeek) }
+                        scope.launch { pagerState.animateScrollToPage(week - minWeek) }
                     },
-                    valueRange = sliderMin..sliderMax,
-                    steps = (maxOf(settings.totalWeeks, maxEntryWeek) - 2).coerceAtLeast(0),
                     modifier = Modifier.weight(1f),
                 )
                 Text(
@@ -771,10 +772,7 @@ internal fun DayHeader(
     val cs = MaterialTheme.colorScheme
     val circleScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isToday) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.spring(
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-        ),
+        animationSpec = AppMotion.bouncy(),
         label = "todayCircle",
     )
     val weekdayColor by androidx.compose.animation.animateColorAsState(
@@ -1224,10 +1222,7 @@ private fun CourseBlock(
     var pressed by remember(entry.entryId) { mutableStateOf(false) }
     val pressScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (pressed || isDragging) 0.97f else 1f,
-        animationSpec = androidx.compose.animation.core.spring(
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-        ),
+        animationSpec = AppMotion.bouncy(),
         label = "blockPress",
     )
     val pressModifier = Modifier.graphicsLayer {
@@ -1247,10 +1242,7 @@ private fun CourseBlock(
             bounceScale.snapTo(0.92f)
             bounceScale.animateTo(
                 1f,
-                androidx.compose.animation.core.spring(
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                ),
+                AppMotion.bouncy(),
             )
         }
     }

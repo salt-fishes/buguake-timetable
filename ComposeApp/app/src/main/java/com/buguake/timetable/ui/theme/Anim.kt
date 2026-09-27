@@ -7,6 +7,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -104,10 +105,14 @@ fun StaggerIn(
 ) {
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
-    val delayMillis = (index.coerceAtLeast(0) * 45).coerceAtMost(360)
+    // 关掉动画时不再错峰：一帧内全部就位
+    val delayMillis =
+        if (AppMotion.enabled) (index.coerceAtLeast(0) * 45).coerceAtMost(360) else 0
     AnimatedVisibility(
         visible = shown,
-        enter = fadeIn(tween(240, delayMillis = delayMillis)),
+        enter = fadeIn(
+            if (AppMotion.enabled) tween(240, delayMillis = delayMillis) else snap(),
+        ),
         modifier = modifier,
     ) {
         Column { content() }
@@ -268,10 +273,7 @@ fun rememberPopScale(visible: Boolean): Float {
     LaunchedEffect(visible) {
         anim.animateTo(
             if (visible) 1f else 0f,
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
+            AppMotion.bouncy(),
         )
     }
     return anim.value

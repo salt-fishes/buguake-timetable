@@ -261,18 +261,22 @@ class RepoSyncManager(
         schoolFolder: String,
         jsPath: String,
         repo: RepoDescriptor = RepoDescriptor.OFFICIAL,
-    ): Result<String> = runCatching {
-        val file = scriptFile(repo, schoolFolder, jsPath)
-        if (file.exists()) return@runCatching file.readText()
-        val bytes = download(repo, repo.mainBranch, "resources/$schoolFolder/$jsPath").getOrThrow()
-        android.util.Log.i("WebImport", "适配器脚本下载成功: $schoolFolder/$jsPath (${bytes.size}B)")
-        val text = String(bytes, Charsets.UTF_8)
-        if (!text.contains("shiguangBridge") && !text.contains("AndroidBridge")) {
-            throw IOException("脚本内容异常（缺少桥协议调用），已拒绝缓存")
+    ): Result<String> = withContext(Dispatchers.IO) {
+        // 整段都在 IO 线程：脚本的读缓存/写缓存是磁盘 IO，调用方从主线程的
+        // scope.launch 进来，不切线程会让"点适配器"到进浏览器之间整段卡住
+        runCatching {
+            val file = scriptFile(repo, schoolFolder, jsPath)
+            if (file.exists()) return@runCatching file.readText()
+            val bytes = download(repo, repo.mainBranch, "resources/$schoolFolder/$jsPath").getOrThrow()
+            android.util.Log.i("WebImport", "适配器脚本下载成功: $schoolFolder/$jsPath (${bytes.size}B)")
+            val text = String(bytes, Charsets.UTF_8)
+            if (!text.contains("shiguangBridge") && !text.contains("AndroidBridge")) {
+                throw IOException("脚本内容异常（缺少桥协议调用），已拒绝缓存")
+            }
+            file.parentFile?.mkdirs()
+            file.writeText(text)
+            text
         }
-        file.parentFile?.mkdirs()
-        file.writeText(text)
-        text
     }
 
     private fun scriptFile(repo: RepoDescriptor, schoolFolder: String, jsPath: String) =

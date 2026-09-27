@@ -1,5 +1,6 @@
 package com.buguake.timetable.ui.timetable
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -28,7 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import com.buguake.timetable.ui.theme.AppMotion
+import kotlinx.coroutines.delay
 
 /** 新增排课：课程名 / 教师 / 地点 / 星期 / 节次 / 自定义周次。
  *  @param maxWeek 已识别课表的最长周（默认选中 1..maxWeek；0 表示无课表，默认 1-17）
@@ -55,6 +60,18 @@ fun AddCourseSheet(
     val defaultMax = maxWeek.coerceIn(1, 17)
     var selectedWeeks by rememberSaveable { mutableStateOf((1..defaultMax).toSet()) }
     val allWeeksRange = 1..17
+    // 批量勾选的视觉错峰：状态同帧落库（「已选 N 周」立刻正确、不阻塞继续点击），
+    // 只有勾选外观按周次次序依次弹出。token 一变就重放，连点不会排队积压
+    var staggerToken by remember { mutableIntStateOf(0) }
+    var staggerDelays by remember { mutableStateOf<Map<Int, Long>>(emptyMap()) }
+    fun applyBulk(target: Set<Int>) {
+        val newly = (target - selectedWeeks).sorted()
+        selectedWeeks = target
+        // 每项约 35ms，整体压在约 400ms 内（周次多时自动收紧间隔）
+        val step = if (newly.isEmpty()) 0L else minOf(35L, 400L / newly.size)
+        staggerDelays = newly.withIndex().associate { (i, w) -> w to i * step }
+        staggerToken++
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -133,11 +150,21 @@ fun AddCourseSheet(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = { selectedWeeks = (1..defaultMax).toSet() }) { Text("重置") }
-                    TextButton(onClick = { selectedWeeks = allWeeksRange.toSet() }) { Text("全选") }
+                    TextButton(onClick = { applyBulk((1..defaultMax).toSet()) }) { Text("重置") }
+                    TextButton(onClick = { applyBulk(allWeeksRange.toSet()) }) { Text("全选") }
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(allWeeksRange.toList()) { w ->
+                        // 每个 chip 自己的弹入（1.0→1.08→1.0）：批量操作时按周次次序依次出现；
+                        // 单个点击不叠加这段动画（点击反馈交给 chip 自身），避免连点抖动
+                        val pop = remember { Animatable(1f) }
+                        val delayMs = staggerDelays[w]
+                        LaunchedEffect(staggerToken, delayMs) {
+                            if (delayMs == null || !AppMotion.enabled) return@LaunchedEffect
+                            delay(delayMs)
+                            pop.animateTo(1.08f, AppMotion.spatialFast())
+                            pop.animateTo(1f, AppMotion.bouncy())
+                        }
                         FilterChip(
                             selected = w in selectedWeeks,
                             onClick = {
@@ -145,6 +172,10 @@ fun AddCourseSheet(
                                 else selectedWeeks + w
                             },
                             label = { Text("$w") },
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = pop.value
+                                scaleY = pop.value
+                            },
                         )
                     }
                 }

@@ -138,7 +138,7 @@ fun courseBlockColors(index: Int, darkTheme: Boolean): Pair<Color, Color> {
 }
 
 /** RGB -> HSV（h 0..360, s 0..1, v 0..1）。 */
-private fun rgbToHsv(c: Color): FloatArray {
+internal fun rgbToHsv(c: Color): FloatArray {
     val r = c.red; val g = c.green; val b = c.blue
     val mx = max(r, max(g, b)); val mn = min(r, min(g, b))
     val d = mx - mn
@@ -151,6 +151,29 @@ private fun rgbToHsv(c: Color): FloatArray {
     val hue = (h + 360f) % 360f
     val s = if (mx == 0f) 0f else d / mx
     return floatArrayOf(hue, s, mx)
+}
+
+/**
+ * HSV -> Color（h 0..360, s 0..1, v 0..1）。与 [rgbToHsv] 配对，
+ * 供主题色生成按「色相保留、明度/饱和度按贴纸纪律重定」的方式推导品牌色族。
+ */
+internal fun hsvToColor(h: Float, s: Float, v: Float, alpha: Float = 1f): Color {
+    val hue = ((h % 360f) + 360f) % 360f
+    val c = v * s
+    val x = c * (1f - kotlin.math.abs((hue / 60f) % 2f - 1f))
+    val m = v - c
+    val r: Float
+    val g: Float
+    val b: Float
+    when {
+        hue < 60f -> { r = c; g = x; b = 0f }
+        hue < 120f -> { r = x; g = c; b = 0f }
+        hue < 180f -> { r = 0f; g = c; b = x }
+        hue < 240f -> { r = 0f; g = x; b = c }
+        hue < 300f -> { r = x; g = 0f; b = c }
+        else -> { r = c; g = 0f; b = x }
+    }
+    return Color(r + m, g + m, b + m, alpha)
 }
 
 /**

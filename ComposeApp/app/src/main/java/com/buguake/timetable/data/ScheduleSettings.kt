@@ -49,6 +49,9 @@ data class ScheduleSettings(
     val timetableName: String = "",   // 活动课表名
     val showExamsOnHome: Boolean = true, // 首页课表是否叠加显示教务考试（默认开）
     val moveScope: String = SettingsRepository.MOVE_SCOPE_ASK, // 长按移动课程范围：ask/this_week/rest_of_term
+    val themeColorMode: String = "default", // 主题色来源：default（贴纸原色）/ system（壁纸取种）/ custom
+    val themeSeedColor: Int = 0,            // 自定义主题色（品牌底，ARGB；仅 mode=custom 时生效）
+    val themeTextColor: Int = 0,            // 自定义文字色（压在主题色上，ARGB；仅 mode=custom 时生效）
 ) {
     val semesterStartDate: LocalDate?
         get() = if (semesterStart == 0L) null
@@ -211,6 +214,16 @@ class SettingsRepository private constructor(context: Context) :
 
     fun setDarkMode(mode: String) = prefs.edit().putString(KEY_DARK_MODE, mode).apply()
 
+    /** 主题色来源：default（贴纸原色）/ system（跟随壁纸）/ custom（自定义种子色）。 */
+    fun setThemeColorMode(mode: String) =
+        prefs.edit().putString(KEY_THEME_COLOR_MODE, mode).apply()
+
+    /** 自定义主题色（品牌底，ARGB）。 */
+    fun setThemeSeedColor(argb: Int) = prefs.edit().putInt(KEY_THEME_SEED_COLOR, argb).apply()
+
+    /** 自定义文字色（压在主题色上的文字/图标，ARGB）。 */
+    fun setThemeTextColor(argb: Int) = prefs.edit().putInt(KEY_THEME_TEXT_COLOR, argb).apply()
+
     /** 上课前提醒开关。 */
     fun setRemindEnabled(value: Boolean) =
         prefs.edit().putBoolean(KEY_REMIND_ENABLED, value).apply()
@@ -332,6 +345,9 @@ class SettingsRepository private constructor(context: Context) :
             customBgBlurDp = prefs.getInt(KEY_CUSTOM_BG_BLUR, CUSTOM_BG_BLUR_DEFAULT),
             showExamsOnHome = prefs.getBoolean(KEY_SHOW_EXAMS_ON_HOME, true),
             moveScope = prefs.getString(KEY_MOVE_SCOPE, MOVE_SCOPE_ASK) ?: MOVE_SCOPE_ASK,
+            themeColorMode = prefs.getString(KEY_THEME_COLOR_MODE, "default") ?: "default",
+            themeSeedColor = prefs.getInt(KEY_THEME_SEED_COLOR, 0),
+            themeTextColor = prefs.getInt(KEY_THEME_TEXT_COLOR, 0),
         )
     }
 
@@ -347,6 +363,9 @@ class SettingsRepository private constructor(context: Context) :
         private const val KEY_SHOW_NON_CURRENT = "show_non_current_week"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         private const val KEY_DARK_MODE = "dark_mode"
+        private const val KEY_THEME_COLOR_MODE = "theme_color_mode"
+        private const val KEY_THEME_SEED_COLOR = "theme_seed_color"
+        private const val KEY_THEME_TEXT_COLOR = "theme_text_color"
         private const val KEY_SECTION_TIMES = "section_times"
         private const val KEY_REMIND_ENABLED = "remind_enabled"
         private const val KEY_REMIND_MINUTES = "remind_minutes_before"

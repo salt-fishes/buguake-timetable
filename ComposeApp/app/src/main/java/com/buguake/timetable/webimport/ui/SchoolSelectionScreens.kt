@@ -116,7 +116,6 @@ fun SchoolSelectionScreen(
     index: SchoolIndexData?,
     loading: Boolean,
     error: String?,
-    snackbarHostState: SnackbarHostState? = null,
     onSelectSchool: (SchoolData) -> Unit,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
@@ -176,7 +175,6 @@ fun SchoolSelectionScreen(
     // 此处不再自带全屏横向拖动检测——它会先消费掉所有横向手势，
     // 外层侧滑永远收不到事件，且隐形阈值拖动没有视觉反馈
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState ?: remember { SnackbarHostState() }) },
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,
         topBar = {
@@ -509,13 +507,13 @@ private fun BasicTextFieldWithPlaceholder(
 @Composable
 fun AdapterSelectionScreen(
     school: SchoolData,
-    snackbarHostState: SnackbarHostState? = null,
+    /** 取适配器脚本（联网/读缓存）期间置 true：给出明确反馈，并挡住重复点击。 */
+    loading: Boolean = false,
     onSelectAdapter: (AdapterData) -> Unit,
     onBack: () -> Unit,
     glass: Boolean = false,
 ) {
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState ?: remember { SnackbarHostState() }) },
         containerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent
         else MaterialTheme.colorScheme.surface,
         topBar = {
@@ -533,14 +531,17 @@ fun AdapterSelectionScreen(
             )
         },
     ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
         LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
+            Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(school.adapters, key = { it.adapterId }) { adapter ->
                 Card(
                     onClick = { onSelectAdapter(adapter) },
+                    // 取脚本期间不再接受点击：否则会并发触发两次导入流程
+                    enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(Modifier.padding(16.dp)) {
@@ -579,6 +580,32 @@ fun AdapterSelectionScreen(
                     }
                 }
             }
+        }
+
+        // 点适配器后要先把脚本拿到手（首次是联网下载，几秒内界面毫无变化会像"点了没反应"）：
+        // 这里给明确的进度反馈，配合 Card 的 enabled=false 挡住重复点击
+        if (loading) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.height(14.dp))
+                    Text("正在准备导入脚本…", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "首次使用需联网下载该学校的适配器",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
         }
     }
 }

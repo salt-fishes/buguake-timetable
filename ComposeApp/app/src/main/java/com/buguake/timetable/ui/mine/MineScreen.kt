@@ -99,6 +99,8 @@ fun MineScreen(
     onSetMoveScope: (String) -> Unit = {},
     onSetDynamicColor: (Boolean) -> Unit,
     onSetDarkMode: (String) -> Unit,
+    /** 主题色：mode（default/system/custom）+ 主题色 + 文字色（ARGB）。 */
+    onSetThemeColor: (String, Int, Int) -> Unit = { _, _, _ -> },
     onOpenSectionTimes: () -> Unit,
     onOpenReminders: () -> Unit,
     onOpenTimetableManage: () -> Unit = {},
@@ -452,7 +454,10 @@ fun MineScreen(
                         selected = settings.darkMode == "system",
                         onClick = {
                             Haptics.tick(context)
-                            onSetDarkMode("system")
+                            // 先抓图再切主题：新主题从手指按下那一点长出来（关动画时自动退化为硬切）
+                            com.buguake.timetable.ui.theme.ThemeReveal.captureThen {
+                                onSetDarkMode("system")
+                            }
                         },
                         label = { Text("跟随系统") },
                     )
@@ -460,7 +465,9 @@ fun MineScreen(
                         selected = settings.darkMode == "light",
                         onClick = {
                             Haptics.tick(context)
-                            onSetDarkMode("light")
+                            com.buguake.timetable.ui.theme.ThemeReveal.captureThen {
+                                onSetDarkMode("light")
+                            }
                         },
                         label = { Text("亮色") },
                     )
@@ -468,9 +475,78 @@ fun MineScreen(
                         selected = settings.darkMode == "dark",
                         onClick = {
                             Haptics.tick(context)
-                            onSetDarkMode("dark")
+                            com.buguake.timetable.ui.theme.ThemeReveal.captureThen {
+                                onSetDarkMode("dark")
+                            }
                         },
                         label = { Text("暗色") },
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "主题色",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                // 只换品牌色与高亮色：纸面 / 卡片面 / 墨色 / 描边保持贴纸 token（见 ui/theme/ThemeColor.kt）
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    FilterChip(
+                        selected = settings.themeColorMode == THEME_COLOR_DEFAULT,
+                        onClick = {
+                            Haptics.tick(context)
+                            onSetThemeColor(
+                                THEME_COLOR_DEFAULT,
+                                settings.themeSeedColor,
+                                settings.themeTextColor,
+                            )
+                        },
+                        label = { Text("贴纸原色") },
+                    )
+                    FilterChip(
+                        selected = settings.themeColorMode == THEME_COLOR_SYSTEM,
+                        // 壁纸取色要 Android 12+；低版本点不动（选了也会退回贴纸原色）
+                        enabled = android.os.Build.VERSION.SDK_INT >=
+                            android.os.Build.VERSION_CODES.S,
+                        onClick = {
+                            Haptics.tick(context)
+                            onSetThemeColor(
+                                THEME_COLOR_SYSTEM,
+                                settings.themeSeedColor,
+                                settings.themeTextColor,
+                            )
+                        },
+                        label = { Text("跟随系统") },
+                    )
+                    FilterChip(
+                        selected = settings.themeColorMode == THEME_COLOR_CUSTOM,
+                        onClick = {
+                            Haptics.tick(context)
+                            // 首次切到自定义：预填贴纸原色 + 它的推荐文字色，而不是从纯红开始
+                            val pair = themePairOrDefault(
+                                settings.themeSeedColor,
+                                settings.themeTextColor,
+                            )
+                            onSetThemeColor(THEME_COLOR_CUSTOM, pair.first, pair.second)
+                        },
+                        label = { Text("自定义") },
+                    )
+                }
+                if (settings.themeColorMode == THEME_COLOR_CUSTOM) {
+                    ThemeColorPicker(
+                        brandColor = settings.themeSeedColor,
+                        textColor = settings.themeTextColor,
+                        onBrand = {
+                            onSetThemeColor(THEME_COLOR_CUSTOM, it, settings.themeTextColor)
+                        },
+                        onText = {
+                            onSetThemeColor(THEME_COLOR_CUSTOM, settings.themeSeedColor, it)
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     )
                 }
             }

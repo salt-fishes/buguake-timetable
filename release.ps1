@@ -109,21 +109,7 @@ if ($dirty) {
 git -C $root tag -f "v$Version" | Out-Null
 Write-Host "==> 已打 tag v$Version"
 
-# ---- 7. GitHub Release（本地构建的 APK + 更新记录）----
-if (-not $NoRelease) {
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "未安装 gh CLI，无法创建 Release（先 winget install GitHub.cli 并 gh auth login）" }
-    $notesFile = Join-Path $env:TEMP "release-notes-v$Version.md"
-    $body = if ($Notes.Count -gt 0) { ("v$Version`n`n" + (($Notes | ForEach-Object { "· $_" }) -join "`n")) } else { "更新内容见应用内「关于 → 更新记录」。" }
-    [System.IO.File]::WriteAllText($notesFile, $body)
-    # 远端已存在同名 Release/Tag 时先清理（同版本重发）
-    gh release view "v$Version" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { gh release delete "v$Version" --yes }
-    gh release create "v$Version" $apkPath --title "v$Version" --notes-file $notesFile
-    if ($LASTEXITCODE -ne 0) { throw "gh release create 失败" }
-    Write-Host "==> GitHub Release v$Version 已创建（APK + 更新记录）"
-}
-
-# ---- 8. 推送 ----
+# ---- 7. 推送（先推再建 Release：gh 要求 tag 已在远端，否则 release create 会拒绝）----
 if (-not $NoPush) {
     git -C $root push origin main 2>&1 | Out-Null
     git -C $root push origin ":refs/tags/v$Version" 2>$null | Out-Null   # 远端同名 tag 先删（若有）
@@ -131,6 +117,27 @@ if (-not $NoPush) {
     Write-Host "==> 已推送 main 与 tag v$Version"
 } else {
     Write-Host "==> -NoPush：未推送远端（记得手动 git push && git push origin v$Version）" -ForegroundColor Yellow
+    Write-Host "    注意：未推送 tag 时 gh release create 会被拒绝，需加 -NoRelease 或自行先推 tag" -ForegroundColor Yellow
+}
+
+# ---- 8. GitHub Release（本地构建的 APK + 更新记录）----
+if (-not $NoRelease) {
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "未安装 gh CLI，无法创建 Release（先 winget install GitHub.cli 并 gh auth login）" }
+    $notesFile = Join-Path $env:TEMP "release-notes-v$Version.md"
+    $body = if ($Notes.Count -gt 0) { ("v$Version`n`n" + (($Notes | ForEach-Object { "· $_" }) -join "`n")) } else { "更新内容见应用内「关于 → 更新记录」。" }
+    [System.IO.File]::WriteAllText($notesFile, $body)
+    # 远端已存在同名 Release 时先删（同版本重发）。
+    # 注意：$ErrorActionPreference = "Stop" 下，PS 5.1 会把原生命令写到 stderr 当成终止错误
+    # （`gh release view` 在 Release 不存在时正是走 stderr），所以这里临时放宽为 Continue。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    gh release view "v$Version" 2>&1 | Out-Null
+    $releaseExists = ($LASTEXITCODE -eq 0)
+    if ($releaseExists) { gh release delete "v$Version" --yes 2>&1 | Out-Null }
+    $ErrorActionPreference = $prevEap
+    gh release create "v$Version" $apkPath --title "v$Version" --notes-file $notesFile
+    if ($LASTEXITCODE -ne 0) { throw "gh release create 失败" }
+    Write-Host "==> GitHub Release v$Version 已创建（APK + 更新记录）"
 }
 
 Write-Host "`n发版完成：v$Version（versionCode $newCode）" -ForegroundColor Green

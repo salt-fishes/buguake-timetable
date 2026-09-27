@@ -1,6 +1,6 @@
 # 不挂科课表
 
-从"简课表"进化而来的 Android 课表应用：**教务网页一键导入** + **宿舍蓝牙开门**。
+Android 课表应用：**教务网页一键导入** + **宿舍蓝牙开门**。
 导入适配由开源社区生态驱动，无需手写解析规则。
 
 > 当前版本 **v1.6**｜支持 Android 8.0 及以上｜JDK 17 + Android SDK 35 构建
@@ -96,7 +96,6 @@ cd ComposeApp
 以及每一位提交过适配的贡献者；再次感谢。此外：
 
 - **云莓不智能**（[yunmei_unintelligent](https://github.com/zxy19/yunmei_unintelligent)，MIT）：宿舍开门的通信协议
-- 渊源：本项目派生自同一作者的前作"简课表"
 
 完整声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

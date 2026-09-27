@@ -13,7 +13,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 
 /**
- * 桥 JSON → 简课表内部模型的转换层。
+ * 桥 JSON → 课表内部模型的转换层。
  *
  * 字段契约与拾光课程表 `CourseImportExport.kt` 一致（JSON 字段名逐字对齐）：
  * 课程 {name, teacher, position, day, startSection?, endSection?, weeks[],

@@ -48,7 +48,7 @@
 
 - `data/`：Room（CourseEntity/ScheduleEntryEntity/AppDatabase）+ `ScheduleRepository` +
   `ScheduleSettings`（SharedPreferences，SettingsRepository 提供 Flow）+
-  `CalendarExport`（.ics）+ `CalendarSync`（写系统日历「简课表」本地日历 / 清空撤销）+
+  `CalendarExport`（.ics）+ `CalendarSync`（写系统日历「不挂科课表」本地日历 / 清空撤销）+
   `WeekCalculator`/`TimeUtils`
 - `schedule/`：`SchedulePdfParser`（PdfRenderer 2x 渲染 → PaddleOCR PP-OCRv6 tiny
   band 分区识别 → 列边界聚类重建表格）、`ScheduleXlsParser`（内置 BIFF8 直读 .xls）
